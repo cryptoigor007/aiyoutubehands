@@ -20,7 +20,7 @@ ai:
 
 logging:
   level: "INFO"
-  json: true
+  json_output: true
 
 calendar:
   db_path: "~/.local/state/aiyoutubehands/calendar.db"
