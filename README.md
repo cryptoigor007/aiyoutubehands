@@ -1,30 +1,46 @@
 # AI YouTube Hands
 
-AI-first CLI for full control of a YouTube channel.
+AI-first CLI для полного управления YouTube-каналом.
 
-**Binary:** `ayh`  
-**Package:** `aiyoutubehands`  
-**Version:** see `VERSION`
+**Бинарник:** `ayh`  
+**Пакет:** `aiyoutubehands`  
+**Версия:** 0.1.0
 
-## Quick start
-
-```bash
-make install
-ayh --help
-ayh doctor
-```
-
-## Safety
-
-- No real YouTube mutations without explicit confirmation and `--yes`.
-- Tokens encrypted with age.
-- Channel ID checked on every request.
-- Quota ledger enforced.
-
-## Development
+## Быстрый старт
 
 ```bash
-make check   # ruff + mypy --strict + pytest + version
+cd aiyoutubehands
+PYTHONPATH=src python3 -m aiyoutubehands.main doctor
+PYTHONPATH=src python3 -m aiyoutubehands.main ai title "мой топик"
+PYTHONPATH=src python3 -m aiyoutubehands.main calendar grid --year 2026 --month 10
+PYTHONPATH=src python3 -m aiyoutubehands.main quota status
 ```
 
-See the Master Agent Charter for full specification.
+## Команды
+
+| Группа | Команды |
+|--------|---------|
+| doctor | диагностика |
+| version | версия |
+| auth | status, login (--stub) |
+| channel | info (dry-run) |
+| video | info (dry-run) |
+| calendar | list, grid, add |
+| quota | status |
+| ai | title, description, tags, script, thumbnail |
+| upload | prepare (dry-run only) |
+
+## Безопасность
+
+- Нет реальных мутаций YouTube без явного разрешения
+- Токены шифруются (AES-GCM)
+- Квоты учитываются
+- `expected_channel_id` проверяется
+
+## Разработка
+
+```bash
+PYTHONPATH=src python3 -m pytest tests/ -q
+```
+
+См. `docs/ARCHITECTURE.md` и Master Agent Charter.

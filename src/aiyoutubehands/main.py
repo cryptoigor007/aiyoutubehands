@@ -273,5 +273,98 @@ def ai_thumbnail(topic: str) -> None:
     click.echo(AIEngine().generate_thumbnail_prompt(topic))
 
 
+
+# ── video ───────────────────────────────────────────────────────────────────
+
+@cli.group()
+def video() -> None:
+    """Видео (только чтение / dry-run)."""
+
+
+@video.command("info")
+@click.argument("video_id")
+@click.option("--dry-run/--no-dry-run", default=True)
+@click.option("--json", "as_json", is_flag=True)
+def video_info(video_id: str, dry_run: bool, as_json: bool) -> None:
+    """Информация о видео (dry-run по умолчанию)."""
+    if dry_run:
+        data = {"dry_run": True, "video_id": video_id}
+        if as_json:
+            click.echo(json.dumps(data, ensure_ascii=False))
+        else:
+            click.echo(f"video info {video_id}: dry-run")
+        return
+    click.echo("Реальный API требует токен", err=True)
+    sys.exit(2)
+
+
+# ── upload ──────────────────────────────────────────────────────────────────
+
+@cli.group()
+def upload() -> None:
+    """Загрузка видео (только prepare / dry-run)."""
+
+
+@upload.command("prepare")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--title", required=True)
+@click.option("--description", default="")
+@click.option("--privacy", default="private", type=click.Choice(["private", "unlisted", "public"]))
+@click.option("--json", "as_json", is_flag=True)
+def upload_prepare(file_path: str, title: str, description: str, privacy: str, as_json: bool) -> None:
+    """Подготовить план загрузки (без реальной отправки)."""
+    from aiyoutubehands.upload import prepare_upload, execute_upload_dry_run
+    plan = prepare_upload(file_path, title=title, description=description, privacy=privacy, dry_run=True)
+    result = execute_upload_dry_run(plan)
+    if as_json:
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        click.echo("План загрузки (dry-run):")
+        click.echo(f"  файл: {plan.file_path}")
+        click.echo(f"  размер: {plan.size} байт")
+        click.echo(f"  sha256: {plan.sha256[:16]}...")
+        click.echo(f"  title: {plan.snippet.title}")
+        click.echo(f"  privacy: {plan.status.privacy_status}")
+        click.echo("Реальная загрузка не выполнена.")
+
+
+@auth.command("login")
+@click.option("--client-secrets", default=None, help="Путь к client_secrets.json")
+@click.option("--stub", is_flag=True, help="Использовать stub (без сети)")
+def auth_login(client_secrets: str | None, stub: bool) -> None:
+    """OAuth login (Device Flow). По умолчанию — stub."""
+    from aiyoutubehands.auth_flow import (
+        device_flow_start_stub,
+        device_flow_poll_stub,
+        save_token_from_flow,
+        load_client_secrets,
+    )
+    from aiyoutubehands.token import TokenStore
+    from aiyoutubehands.config import get_config_dir
+    import os
+
+    if not stub and client_secrets is None:
+        click.echo("Для реального login укажите --client-secrets и уберите --stub")
+        click.echo("Сейчас доступен только --stub режим")
+        stub = True
+
+    if stub:
+        dc = device_flow_start_stub("stub_client")
+        click.echo(f"Откройте {dc.verification_url}")
+        click.echo(f"Введите код: {dc.user_code}")
+        token = device_flow_poll_stub(dc.device_code)
+        key = os.urandom(32)
+        # store key hint only in memory for stub demo
+        store_path = get_config_dir() / "token.age"
+        # for stub we still need a key - use ephemeral and warn
+        click.echo("stub: токен сгенерирован в памяти (не сохранён постоянно без ключа)")
+        click.echo(f"access_token: {token.access_token[:12]}...")
+        click.echo("Для постоянного хранения нужен ключ шифрования (шаг production).")
+        return
+
+    click.echo("Реальный OAuth flow ещё требует настройки client_secrets + age key")
+    sys.exit(2)
+
+
 if __name__ == "__main__":
     cli()

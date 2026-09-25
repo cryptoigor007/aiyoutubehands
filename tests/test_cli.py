@@ -46,3 +46,26 @@ def test_quota_status(tmp_path) -> None:
     r = runner.invoke(cli, ["quota", "status", "--db", str(tmp_path / "q.db")])
     assert r.exit_code == 0
     assert "Использовано" in r.output or "used" in r.output.lower()
+
+
+def test_ai_title() -> None:
+    runner = CliRunner()
+    r = runner.invoke(cli, ["ai", "title", "python"])
+    assert r.exit_code == 0
+    assert len(r.output.strip()) > 5
+
+
+def test_auth_login_stub() -> None:
+    runner = CliRunner()
+    r = runner.invoke(cli, ["auth", "login", "--stub"])
+    assert r.exit_code == 0
+    assert "STUB" in r.output or "stub" in r.output.lower() or "код" in r.output.lower()
+
+
+def test_upload_prepare(tmp_path) -> None:
+    f = tmp_path / "x.bin"
+    f.write_bytes(b"data")
+    runner = CliRunner()
+    r = runner.invoke(cli, ["upload", "prepare", str(f), "--title", "T"])
+    assert r.exit_code == 0
+    assert "dry-run" in r.output.lower() or "План" in r.output
