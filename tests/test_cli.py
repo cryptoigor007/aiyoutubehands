@@ -55,11 +55,15 @@ def test_ai_title() -> None:
     assert len(r.output.strip()) > 5
 
 
-def test_auth_login_stub() -> None:
+def test_auth_login_stub(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
     runner = CliRunner()
-    r = runner.invoke(cli, ["auth", "login", "--stub"])
-    assert r.exit_code == 0
-    assert "STUB" in r.output or "stub" in r.output.lower() or "код" in r.output.lower()
+    r = runner.invoke(
+        cli,
+        ["auth", "login", "--stub", "--passphrase", "test", "--yes"],
+    )
+    assert r.exit_code == 0, r.output
+    assert "OK" in r.output or "сохранён" in r.output or "код" in r.output.lower()
 
 
 def test_upload_prepare(tmp_path) -> None:

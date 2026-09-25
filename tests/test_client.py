@@ -62,3 +62,10 @@ def test_dry_run_bypasses_circuit() -> None:
     assert not client.circuit_closed
     result = client.get("/whatever", dry_run=True)
     assert result["dry_run"] is True
+
+
+def test_client_error_retry_after_attr() -> None:
+    err = map_http_error(429, "rate")
+    assert err.retryable is True
+    err.retry_after = 1.5
+    assert err.retry_after == 1.5

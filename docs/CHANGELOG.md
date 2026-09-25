@@ -2,12 +2,13 @@
 
 ## 0.1.0 (2026-09-25)
 
-- Initial scaffold
-- Logging + Config
-- Token store (AES-GCM)
-- Quota engine
-- HTTP client + YouTube models/service (dry-run)
-- Calendar (SQLite + ASCII grid)
-- CLI commands (doctor, calendar, quota, auth, channel, ai)
+- Scaffold, logging, config
+- Token: AYH1 blob, AES-GCM, scrypt passphrase
+- Quota ledger, HTTP client (retries, circuit, Retry-After)
+- YouTube models/service dry-run
+- Calendar SQLite + ASCII grid
+- CLI commands package + exit codes (71 channel mismatch)
+- Auth login/logout stub with encrypted token save
 - AI local stub
-- Degradation and version tests
+- Upload prepare dry-run only
+- Degradation tests, CI workflow

@@ -25,6 +25,7 @@ class ClientError(Exception):
         status_code: int | None = None,
         action: str = "Повторите позже или проверьте запрос",
         retryable: bool = False,
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -32,6 +33,7 @@ class ClientError(Exception):
         self.status_code = status_code
         self.action = action
         self.retryable = retryable
+        self.retry_after = retry_after
 
 
 class CircuitOpenError(ClientError):
@@ -196,8 +198,16 @@ class HttpClient:
                 )
                 if resp.status_code >= 400:
                     err = map_http_error(resp.status_code, resp.text)
+                    ra = resp.headers.get("Retry-After")
+                    if ra is not None:
+                        try:
+                            err.retry_after = float(ra)
+                        except ValueError:
+                            err.retry_after = None
                     if err.retryable and attempt < self.max_retries:
-                        time.sleep(0.5 * (2**attempt))
+                        delay = err.retry_after if err.retry_after is not None else 0.5 * (2**attempt)
+                        delay = max(0.0, min(float(delay), 60.0))
+                        time.sleep(delay)
                         last_exc = err
                         continue
                     self._record_failure()
