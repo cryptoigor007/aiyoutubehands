@@ -69,3 +69,17 @@ def test_upload_prepare(tmp_path) -> None:
     r = runner.invoke(cli, ["upload", "prepare", str(f), "--title", "T"])
     assert r.exit_code == 0
     assert "dry-run" in r.output.lower() or "План" in r.output
+
+
+def test_main_ok() -> None:
+    from aiyoutubehands.main import main
+
+    assert main(["version"]) == 0
+
+
+def test_main_unknown_command() -> None:
+    from aiyoutubehands.main import main
+
+    # click raises UsageError / SystemExit depending on path
+    code = main(["no-such-command"])
+    assert code != 0

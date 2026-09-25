@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Wrapper script for the ayh CLI (development convenience)."""
 
-from aiyoutubehands.main import cli
+from aiyoutubehands.main import main
+import sys
 
 if __name__ == "__main__":
-    cli()
+    sys.exit(main())
