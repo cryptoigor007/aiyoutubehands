@@ -57,5 +57,7 @@ def exit_code_for_error_code(code: str) -> int:
         "CIRCUIT_OPEN": EXIT_CIRCUIT,
         "UNSUPPORTED": EXIT_UNSUPPORTED,
         "UPLOAD_FORBIDDEN": EXIT_FORBIDDEN,
+        "CONFIRM_REQUIRED": EXIT_USAGE,
+        "BAD_REQUEST": EXIT_USAGE,
     }
     return mapping.get(code, EXIT_GENERIC)

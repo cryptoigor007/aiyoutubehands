@@ -13,7 +13,9 @@ def register_all(cli: click.Group) -> None:
         ai_cmd,
         auth_cmd,
         calendar_cmd,
+        captions_cmd,
         channel_cmd,
+        comments_cmd,
         doctor_cmd,
         quota_cmd,
         upload_cmd,
@@ -27,6 +29,8 @@ def register_all(cli: click.Group) -> None:
     channel_cmd.register(cli)
     video_cmd.register(cli)
     upload_cmd.register(cli)
+    comments_cmd.register(cli)
+    captions_cmd.register(cli)
     ai_cmd.register(cli)
 
     @cli.command("version")

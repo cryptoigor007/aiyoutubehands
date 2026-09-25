@@ -37,3 +37,14 @@ def test_channel_resource() -> None:
     c = ChannelResource.from_api(raw)
     assert c.id == "UC_x"
     assert c.title == "My Channel"
+
+
+def test_comment_and_caption() -> None:
+    from aiyoutubehands.models.youtube import CommentResource, CaptionResource
+    c = CommentResource.from_api({
+        "id": "c1",
+        "snippet": {"topLevelComment": {"snippet": {"authorDisplayName": "A", "textOriginal": "Hi", "videoId": "v"}}},
+    })
+    assert c.author == "A"
+    cap = CaptionResource.from_api({"id": "x", "snippet": {"videoId": "v", "language": "ru", "name": "RU"}})
+    assert cap.language == "ru"

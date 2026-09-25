@@ -41,7 +41,7 @@ class VideoSnippet:
 
 @dataclass
 class VideoStatus:
-    privacy_status: str = "private"  # private | unlisted | public
+    privacy_status: str = "private"
     publish_at: str | None = None
     self_declared_made_for_kids: bool = False
 
@@ -118,5 +118,52 @@ class PlaylistResource:
             title=str(snippet.get("title") or ""),
             description=str(snippet.get("description") or ""),
             item_count=int(content.get("itemCount") or 0),
+            raw=data,
+        )
+
+
+@dataclass
+class CommentResource:
+    id: str = ""
+    video_id: str = ""
+    author: str = ""
+    text: str = ""
+    like_count: int = 0
+    published_at: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> CommentResource:
+        snippet = data.get("snippet") or {}
+        top = snippet.get("topLevelComment", {}).get("snippet") or snippet
+        return cls(
+            id=str(data.get("id") or ""),
+            video_id=str(snippet.get("videoId") or top.get("videoId") or ""),
+            author=str(top.get("authorDisplayName") or ""),
+            text=str(top.get("textDisplay") or top.get("textOriginal") or ""),
+            like_count=int(top.get("likeCount") or 0),
+            published_at=str(top.get("publishedAt") or ""),
+            raw=data,
+        )
+
+
+@dataclass
+class CaptionResource:
+    id: str = ""
+    video_id: str = ""
+    language: str = ""
+    name: str = ""
+    track_kind: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> CaptionResource:
+        snippet = data.get("snippet") or {}
+        return cls(
+            id=str(data.get("id") or ""),
+            video_id=str(snippet.get("videoId") or ""),
+            language=str(snippet.get("language") or ""),
+            name=str(snippet.get("name") or ""),
+            track_kind=str(snippet.get("trackKind") or ""),
             raw=data,
         )

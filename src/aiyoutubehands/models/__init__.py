@@ -1,11 +1,13 @@
 """Data models."""
 
 from aiyoutubehands.models.youtube import (
+    CaptionResource,
+    ChannelResource,
+    CommentResource,
+    PlaylistResource,
+    VideoResource,
     VideoSnippet,
     VideoStatus,
-    VideoResource,
-    ChannelResource,
-    PlaylistResource,
 )
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "VideoResource",
     "ChannelResource",
     "PlaylistResource",
+    "CommentResource",
+    "CaptionResource",
 ]
