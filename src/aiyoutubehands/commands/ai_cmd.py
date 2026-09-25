@@ -49,3 +49,29 @@ def register(cli: click.Group) -> None:
         from aiyoutubehands.ai import AIEngine
 
         click.echo(AIEngine().generate_thumbnail_prompt(topic))
+
+    @ai.command("chapters")
+    @click.argument("topic")
+    def ai_chapters(topic: str) -> None:
+        """Главы / таймкоды."""
+        from aiyoutubehands.ai import AIEngine
+
+        click.echo(AIEngine().generate_chapters(topic))
+
+    @ai.command("translate")
+    @click.argument("text")
+    @click.option("--lang", default="en")
+    def ai_translate(text: str, lang: str) -> None:
+        """Перевод текста."""
+        from aiyoutubehands.ai import AIEngine
+
+        click.echo(AIEngine().translate(text, lang=lang))
+
+    @ai.command("calendar")
+    @click.argument("niche")
+    @click.option("--days", default=7, type=int)
+    def ai_calendar(niche: str, days: int) -> None:
+        """Контент-календарь."""
+        from aiyoutubehands.ai import AIEngine
+
+        click.echo(AIEngine().content_calendar(niche, days=days))

@@ -50,3 +50,15 @@ def test_update_requires_yes(tmp_path: Path) -> None:
         raise AssertionError("expected ClientError")
     except ClientError as e:
         assert e.code == "CONFIRM_REQUIRED"
+
+
+def test_schedule_and_playlist_dry_run(tmp_path: Path) -> None:
+    client = HttpClient()
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_test")
+    r = yt.schedule_video("vid", "2026-10-01T12:00:00Z", dry_run=True, yes=True)
+    assert r["dry_run"] is True
+    r2 = yt.create_playlist("T", dry_run=True, yes=True)
+    assert r2["dry_run"] is True
+    r3 = yt.moderate_comment("c1", "published", dry_run=True, yes=True)
+    assert r3.get("dry_run") is True or "dry_run" in r3

@@ -28,6 +28,12 @@ class LocalStubProvider:
             return "Привет! Сегодня мы поговорим о...\n\n1. Введение\n2. Основная часть\n3. Заключение"
         if "thumbnail" in p or "обложк" in p:
             return "Bright thumbnail: bold text 'AI YT', high contrast, face looking at camera"
+        if "chapter" in p or "глав" in p:
+            return "0:00 Интро\n0:30 Основная часть\n5:00 Выводы"
+        if "translate" in p or "перев" in p:
+            return "[translated] " + prompt[-80:]
+        if "calendar" in p or "календар" in p:
+            return "Пн: Тема A\nВт: Тема B\nСр: Тема C"
         return f"[local-stub] Ответ на: {prompt[:80]}"
 
 
@@ -58,3 +64,12 @@ class AIEngine:
 
     def reply_to_comment(self, comment: str) -> str:
         return self.provider.complete(f"Reply politely to this YouTube comment: {comment}")
+
+    def generate_chapters(self, topic: str) -> str:
+        return self.provider.complete(f"Generate YouTube chapters timestamps for: {topic}")
+
+    def translate(self, text: str, lang: str = "en") -> str:
+        return self.provider.complete(f"Translate to {lang}: {text}")
+
+    def content_calendar(self, niche: str, days: int = 7) -> str:
+        return self.provider.complete(f"Content calendar for {days} days in niche: {niche}")

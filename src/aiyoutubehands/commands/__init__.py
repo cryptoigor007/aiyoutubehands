@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
 
 
@@ -17,6 +15,7 @@ def register_all(cli: click.Group) -> None:
         channel_cmd,
         comments_cmd,
         doctor_cmd,
+        playlist_cmd,
         quota_cmd,
         upload_cmd,
         video_cmd,
@@ -31,6 +30,7 @@ def register_all(cli: click.Group) -> None:
     upload_cmd.register(cli)
     comments_cmd.register(cli)
     captions_cmd.register(cli)
+    playlist_cmd.register(cli)
     ai_cmd.register(cli)
 
     @cli.command("version")
