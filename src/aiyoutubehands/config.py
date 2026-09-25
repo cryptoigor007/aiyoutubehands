@@ -143,3 +143,34 @@ def load_config(path: Path | None = None) -> AppConfig:
     cfg.calendar.db_path = _expand(cfg.calendar.db_path)
 
     return cfg
+
+
+def load_config_optional(path: Path | None = None) -> AppConfig:
+    """Load config without requiring expected_channel_id (for doctor/local commands)."""
+    if path is None:
+        path = get_config_dir() / "config.yaml"
+    data: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            raw = path.read_text(encoding="utf-8")
+            loaded = yaml.safe_load(raw)
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception as exc:
+            raise ConfigError(
+                f"Не удалось прочитать конфиг {path}: {exc}",
+                code="CONFIG_READ_ERROR",
+                action="Проверьте синтаксис YAML",
+            ) from exc
+    try:
+        cfg = AppConfig.model_validate(data)
+    except Exception as exc:
+        raise ConfigError(
+            f"Невалидный конфиг: {exc}",
+            code="CONFIG_VALIDATION_ERROR",
+            action="Исправьте config.yaml",
+        ) from exc
+    cfg.auth.client_secrets_file = _expand(cfg.auth.client_secrets_file)
+    cfg.auth.token_file = _expand(cfg.auth.token_file)
+    cfg.calendar.db_path = _expand(cfg.calendar.db_path)
+    return cfg

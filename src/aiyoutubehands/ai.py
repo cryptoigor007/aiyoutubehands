@@ -18,13 +18,13 @@ class LocalStubProvider:
 
     def complete(self, prompt: str, **kwargs: Any) -> str:
         p = prompt.lower()
-        if "title" in p:
+        if "title" in p or "заголов" in p:
             return "Как я сделал X за 10 минут | AI YouTube Hands"
-        if "description" in p:
+        if "description" in p or "описан" in p:
             return "В этом видео разберём тему подробно.\n\nТаймкоды:\n0:00 Интро\n\n#youtube #ai"
-        if "tags" in p:
+        if "tags" in p or "тег" in p:
             return "youtube, ai, tutorial, automation, cli"
-        if "script" in p:
+        if "script" in p or "сценари" in p:
             return "Привет! Сегодня мы поговорим о...\n\n1. Введение\n2. Основная часть\n3. Заключение"
         if "thumbnail" in p or "обложк" in p:
             return "Bright thumbnail: bold text 'AI YT', high contrast, face looking at camera"

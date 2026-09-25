@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from aiyoutubehands.logging import get_logger
-from aiyoutubehands.token import TokenData, TokenStore, TokenError
+from aiyoutubehands.token import TokenData, TokenStore
 
 log = get_logger(__name__)
 

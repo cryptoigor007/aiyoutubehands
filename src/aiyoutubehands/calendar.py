@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import calendar as calmod
+
+calmod.setfirstweekday(calmod.MONDAY)
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +69,8 @@ class Calendar:
             )
 
     def add(self, entry: CalendarEntry) -> None:
+        if not entry.video_id.strip():
+            raise ValueError("video_id не может быть пустым")
         with self._connect() as conn:
             conn.execute(
                 """

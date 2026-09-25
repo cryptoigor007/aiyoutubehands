@@ -54,3 +54,11 @@ def test_circuit_reset() -> None:
     assert not client.circuit_closed
     client._record_success()
     assert client.circuit_closed
+
+
+def test_dry_run_bypasses_circuit() -> None:
+    client = HttpClient(base_url="https://example.invalid", failure_threshold=1)
+    client._record_failure()
+    assert not client.circuit_closed
+    result = client.get("/whatever", dry_run=True)
+    assert result["dry_run"] is True

@@ -59,13 +59,24 @@ def doctor(ctx: click.Context, as_json: bool) -> None:
         result["ok"] = False
         result["checks"]["logging"] = str(exc)
 
-    result["checks"]["modules"] = {
-        "token": True,
-        "quota": True,
-        "client": True,
-        "calendar": True,
-        "youtube": True,
-    }
+    modules = (
+        "aiyoutubehands.token",
+        "aiyoutubehands.quota",
+        "aiyoutubehands.client",
+        "aiyoutubehands.calendar",
+        "aiyoutubehands.youtube",
+        "aiyoutubehands.ai",
+        "aiyoutubehands.upload",
+    )
+    mod_status: dict[str, str] = {}
+    for mod in modules:
+        try:
+            __import__(mod)
+            mod_status[mod.split(".")[-1]] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            mod_status[mod.split(".")[-1]] = f"error: {exc}"
+            result["ok"] = False
+    result["checks"]["modules"] = mod_status
 
     if as_json:
         click.echo(json.dumps(result, ensure_ascii=False, indent=2))

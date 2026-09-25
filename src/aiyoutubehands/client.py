@@ -46,6 +46,15 @@ class CircuitOpenError(ClientError):
 
 def map_http_error(status: int, body: str = "") -> ClientError:
     body_l = body.lower()
+    reason = ""
+    try:
+        import json as _json
+        parsed = _json.loads(body) if body.strip().startswith("{") else {}
+        errors = (parsed.get("error") or {}).get("errors") or []
+        if errors and isinstance(errors[0], dict):
+            reason = str(errors[0].get("reason") or "").lower()
+    except Exception:
+        reason = ""
     if status == 401:
         return ClientError(
             "Требуется авторизация",
@@ -55,7 +64,11 @@ def map_http_error(status: int, body: str = "") -> ClientError:
             retryable=False,
         )
     if status == 403:
-        if "quota" in body_l or "quotaexceeded" in body_l:
+        if (
+            reason in {"quotaexceeded", "dailylimitexceeded", "userratelimitexceeded"}
+            or "quota" in body_l
+            or "quotaexceeded" in body_l
+        ):
             return ClientError(
                 "Квота YouTube API исчерпана",
                 code="QUOTA_EXCEEDED",
@@ -163,12 +176,13 @@ class HttpClient:
         json_body: dict[str, Any] | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        self._ensure_circuit()
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
 
         if dry_run:
             log.info("http_dry_run", method=method, url=url, params=params)
             return {"dry_run": True, "method": method, "url": url, "params": params}
+
+        self._ensure_circuit()
 
         last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):

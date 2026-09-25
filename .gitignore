@@ -55,8 +55,6 @@ tokens/
 *.log
 
 # Project specific
-~/.config/aiyoutubehands/
-~/.local/state/aiyoutubehands/
 config/local.*
 config/*.local.yaml
 .env

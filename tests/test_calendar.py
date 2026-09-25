@@ -44,3 +44,12 @@ def test_ascii_grid(tmp_path: Path) -> None:
     grid = cal.ascii_grid(year=2026, month=10)
     assert "2026-10" in grid or "Окт" in grid or "10" in grid
     assert "A" in grid or "v1" in grid
+
+
+def test_reject_empty_video_id(tmp_path: Path) -> None:
+    cal = Calendar(tmp_path / "cal.db")
+    try:
+        cal.add(CalendarEntry(video_id="  ", title="T", publish_at="2026-10-01T00:00:00Z"))
+        raise AssertionError("should have raised")
+    except ValueError:
+        pass

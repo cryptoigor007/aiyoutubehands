@@ -11,6 +11,7 @@ import yaml
 from aiyoutubehands.config import (
     AppConfig,
     load_config,
+    load_config_optional,
     get_config_dir,
     get_state_dir,
     ConfigError,
@@ -66,3 +67,13 @@ def test_app_config_defaults() -> None:
     assert cfg.ai.default_provider == "local"
     assert cfg.ai.allow_cloud is False
     assert cfg.logging.level == "INFO"
+
+
+def test_load_config_optional_without_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    cfg_dir = tmp_path / ".config" / "aiyoutubehands"
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "config.yaml").write_text("logging:\n  level: INFO\n", encoding="utf-8")
+    cfg = load_config_optional()
+    assert cfg.logging.level == "INFO"
+    assert cfg.channel is None
