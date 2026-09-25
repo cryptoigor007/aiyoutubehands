@@ -76,3 +76,30 @@ def test_audit_log(tmp_path: Path) -> None:
     lines = (tmp_path / "audit.jsonl").read_text().strip().splitlines()
     assert len(lines) >= 1
     assert "rotate" in lines[-1]
+
+
+def test_passphrase_roundtrip(tmp_path: Path) -> None:
+    path = tmp_path / "token.ayh"
+    store = TokenStore(path=path, passphrase="secret-pass")
+    data = TokenData(access_token="at", refresh_token="rt", expires_at=9999999999)
+    store.save(data)
+    loaded = TokenStore(path=path, passphrase="secret-pass").load()
+    assert loaded.access_token == "at"
+    assert loaded.refresh_token == "rt"
+
+
+def test_passphrase_wrong_fails(tmp_path: Path) -> None:
+    path = tmp_path / "token.ayh"
+    TokenStore(path=path, passphrase="good").save(
+        TokenData(access_token="a", refresh_token="r", expires_at=1)
+    )
+    with pytest.raises(TokenError):
+        TokenStore(path=path, passphrase="bad").load()
+
+
+def test_versioned_blob_magic(tmp_path: Path) -> None:
+    path = tmp_path / "token.ayh"
+    key = b"k" * 32
+    TokenStore(path=path, key=key).save(TokenData(access_token="a", refresh_token="r", expires_at=1))
+    raw = path.read_bytes()
+    assert raw.startswith(b"AYH1")

@@ -1,4 +1,11 @@
-"""OAuth2 token management with encryption, rotation, audit and health."""
+"""OAuth2 token management with encryption, rotation, audit and health.
+
+Encryption: AES-256-GCM. On-disk format is versioned (magic AYH1).
+Passphrase mode uses scrypt (salt stored in-file). Raw 32-byte key mode
+remains for tests and advanced use.
+
+Full Mozilla age CLI interop is not implemented yet; blob is application-specific.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +17,16 @@ from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from aiyoutubehands.logging import get_logger
 
 log = get_logger(__name__)
+
+BLOB_MAGIC = b"AYH1"
+BLOB_MODE_RAW = 0
+BLOB_MODE_PASSPHRASE = 1
+SALT_LEN = 16
 
 
 class TokenError(Exception):
@@ -62,7 +75,7 @@ class TokenData:
 
 
 def encrypt_bytes(plaintext: bytes, key: bytes) -> bytes:
-    """AES-256-GCM encrypt. key must be 32 bytes."""
+    """AES-256-GCM encrypt. key must be 32 bytes. Returns nonce + ciphertext."""
     if len(key) != 32:
         raise TokenError("Ключ шифрования должен быть 32 байта", code="TOKEN_BAD_KEY")
     aes = AESGCM(key)
@@ -72,7 +85,7 @@ def encrypt_bytes(plaintext: bytes, key: bytes) -> bytes:
 
 
 def decrypt_bytes(blob: bytes, key: bytes) -> bytes:
-    """AES-256-GCM decrypt."""
+    """AES-256-GCM decrypt. blob is nonce + ciphertext."""
     if len(key) != 32:
         raise TokenError("Ключ шифрования должен быть 32 байта", code="TOKEN_BAD_KEY")
     if len(blob) < 13:
@@ -91,13 +104,43 @@ def decrypt_bytes(blob: bytes, key: bytes) -> bytes:
 
 def derive_key_from_passphrase(passphrase: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
     """Derive 32-byte key via scrypt. Returns (key, salt)."""
-    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-
     if salt is None:
-        salt = os.urandom(16)
+        salt = os.urandom(SALT_LEN)
+    if len(salt) != SALT_LEN:
+        raise TokenError("Неверная длина salt", code="TOKEN_BAD_SALT")
     kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1)
     key = kdf.derive(passphrase.encode("utf-8"))
     return key, salt
+
+
+def pack_blob(payload: bytes, *, mode: int, salt: bytes | None = None) -> bytes:
+    """Pack versioned on-disk blob."""
+    if mode == BLOB_MODE_RAW:
+        return BLOB_MAGIC + bytes([mode]) + payload
+    if mode == BLOB_MODE_PASSPHRASE:
+        if salt is None or len(salt) != SALT_LEN:
+            raise TokenError("Для passphrase-режима нужен salt", code="TOKEN_BAD_SALT")
+        return BLOB_MAGIC + bytes([mode]) + salt + payload
+    raise TokenError(f"Неизвестный mode={mode}", code="TOKEN_BAD_MODE")
+
+
+def unpack_blob(blob: bytes) -> tuple[int, bytes | None, bytes]:
+    """Unpack versioned blob. Returns (mode, salt|None, payload).
+
+    Legacy files without magic are treated as raw payload (mode RAW, no salt).
+    """
+    if blob.startswith(BLOB_MAGIC) and len(blob) >= 6:
+        mode = blob[4]
+        rest = blob[5:]
+        if mode == BLOB_MODE_RAW:
+            return mode, None, rest
+        if mode == BLOB_MODE_PASSPHRASE:
+            if len(rest) < SALT_LEN + 13:
+                raise TokenError("Повреждённый токен", code="TOKEN_CORRUPT")
+            return mode, rest[:SALT_LEN], rest[SALT_LEN:]
+        raise TokenError(f"Неизвестный mode={mode}", code="TOKEN_BAD_MODE")
+    # legacy: pure nonce+ct
+    return BLOB_MODE_RAW, None, blob
 
 
 class TokenStore:
@@ -106,17 +149,42 @@ class TokenStore:
     def __init__(
         self,
         path: Path | str,
-        key: bytes,
+        key: bytes | None = None,
+        *,
+        passphrase: str | None = None,
         audit_path: Path | str | None = None,
     ) -> None:
+        if key is None and passphrase is None:
+            raise TokenError(
+                "Нужен key или passphrase",
+                code="TOKEN_BAD_KEY",
+                action="Передайте 32-байтовый ключ или passphrase",
+            )
+        if key is not None and len(key) != 32:
+            raise TokenError("Ключ шифрования должен быть 32 байта", code="TOKEN_BAD_KEY")
         self.path = Path(path)
-        self.key = key
+        self._key = key
+        self._passphrase = passphrase
         self.audit_path = Path(audit_path) if audit_path else self.path.with_suffix(".audit.jsonl")
+
+    def _resolve_key(self, salt: bytes | None = None) -> tuple[bytes, bytes | None]:
+        if self._passphrase is not None:
+            key, used_salt = derive_key_from_passphrase(self._passphrase, salt)
+            return key, used_salt
+        assert self._key is not None
+        return self._key, None
 
     def save(self, data: TokenData) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         raw = json.dumps(data.to_dict(), ensure_ascii=False).encode("utf-8")
-        blob = encrypt_bytes(raw, self.key)
+        if self._passphrase is not None:
+            key, salt = self._resolve_key(salt=None)
+            payload = encrypt_bytes(raw, key)
+            blob = pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt)
+        else:
+            key, _ = self._resolve_key()
+            payload = encrypt_bytes(raw, key)
+            blob = pack_blob(payload, mode=BLOB_MODE_RAW)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_bytes(blob)
         tmp.chmod(0o600)
@@ -133,7 +201,24 @@ class TokenStore:
                 action="Выполните авторизацию (ayh auth login)",
             )
         blob = self.path.read_bytes()
-        raw = decrypt_bytes(blob, self.key)
+        mode, salt, payload = unpack_blob(blob)
+        if mode == BLOB_MODE_PASSPHRASE:
+            if self._passphrase is None:
+                raise TokenError(
+                    "Токен защищён passphrase, ключ не подходит",
+                    code="TOKEN_BAD_KEY",
+                    action="Передайте тот же passphrase",
+                )
+            key, _ = derive_key_from_passphrase(self._passphrase, salt)
+        else:
+            if self._key is None:
+                # allow passphrase store to open raw only if key derived wrongly — reject
+                raise TokenError(
+                    "Токен в raw-режиме, нужен 32-байтовый ключ",
+                    code="TOKEN_BAD_KEY",
+                )
+            key = self._key
+        raw = decrypt_bytes(payload, key)
         try:
             d = json.loads(raw.decode("utf-8"))
         except Exception as exc:
