@@ -5,9 +5,9 @@ channel:
   expected_channel_id: "UC_xxxxxxxxxxxxxxxxxxxxxx"  # required for safety
 
 auth:
-  # OAuth2 credentials (client_id / client_secret from Google Cloud Console)
-  client_secrets_file: "~/.config/aiyoutubehands/client_secrets.json"
-  token_file: "~/.config/aiyoutubehands/token.age"  # age-encrypted
+  # Encrypted local OAuth client vault. Create it with `ayh auth import-client-secrets`.
+  client_secrets_file: "~/.config/aiyoutubehands/client_secrets.age"
+  token_file: "~/.config/aiyoutubehands/token.age"
 
 quota:
   daily_limit: 10000

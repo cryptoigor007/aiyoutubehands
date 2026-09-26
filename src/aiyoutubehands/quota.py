@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from aiyoutubehands.logging import get_logger
 
@@ -62,7 +64,10 @@ class QuotaLedger:
 
     @staticmethod
     def _today() -> str:
-        return time.strftime("%Y-%m-%d", time.gmtime())
+        # YouTube resets the daily quota at midnight Pacific Time, not UTC.
+        # Using UTC makes the ledger report "fresh" quota during the 03:00-10:00
+        # MSK window (07:00-14:00 UTC) when YouTube has already reset.
+        return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
     def record(self, operation: str, units: int) -> None:
         day = self._today()

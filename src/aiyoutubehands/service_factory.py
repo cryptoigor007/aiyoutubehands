@@ -28,7 +28,7 @@ def build_youtube_service(
     store = TokenStore(path=cfg.auth.token_file, passphrase=passphrase)
     token = store.load()
     if token.is_expired() and token.refresh_token:
-        secrets = load_client_secrets(Path(cfg.auth.client_secrets_file))
+        secrets = load_client_secrets(Path(cfg.auth.client_secrets_file), passphrase=passphrase)
         token = refresh_access_token(
             str(secrets["client_id"]),
             str(secrets.get("client_secret") or ""),

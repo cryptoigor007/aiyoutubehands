@@ -33,7 +33,7 @@ class ChannelConfig(BaseModel):
 
 
 class AuthConfig(BaseModel):
-    client_secrets_file: str = "~/.config/aiyoutubehands/client_secrets.json"
+    client_secrets_file: str = "~/.config/aiyoutubehands/client_secrets.age"
     token_file: str = "~/.config/aiyoutubehands/token.age"
 
 
@@ -96,6 +96,11 @@ def get_state_dir() -> Path:
 
 
 def _expand(path: str) -> str:
+    # Defaults follow XDG directories instead of always resolving to $HOME.
+    if path.startswith("~/.config/aiyoutubehands/"):
+        return str(get_config_dir() / Path(path).name)
+    if path.startswith("~/.local/state/aiyoutubehands/"):
+        return str(get_state_dir() / Path(path).name)
     return str(Path(path).expanduser())
 
 
@@ -174,3 +179,33 @@ def load_config_optional(path: Path | None = None) -> AppConfig:
     cfg.auth.token_file = _expand(cfg.auth.token_file)
     cfg.calendar.db_path = _expand(cfg.calendar.db_path)
     return cfg
+
+
+def save_channel_id(channel_id: str, path: Path | None = None) -> Path:
+    """Create or update the channel safety setting without touching credentials."""
+    if not channel_id.startswith("UC"):
+        raise ConfigError(
+            "ID канала должен начинаться с UC",
+            code="CONFIG_INVALID_CHANNEL_ID",
+            action="Укажите ID канала из YouTube Settings -> Advanced settings",
+        )
+    target = path or get_config_dir() / "config.yaml"
+    data: dict[str, Any] = {}
+    if target.is_file():
+        try:
+            loaded = yaml.safe_load(target.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception as exc:
+            raise ConfigError(
+                f"Не удалось прочитать конфиг {target}", code="CONFIG_READ_ERROR"
+            ) from exc
+    data["channel"] = {"expected_channel_id": channel_id}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.chmod(0o700)
+    temp = target.with_suffix(".tmp")
+    temp.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    temp.chmod(0o600)
+    temp.replace(target)
+    target.chmod(0o600)
+    return target

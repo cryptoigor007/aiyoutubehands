@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
 import click
+
+from aiyoutubehands.commands.security import require_passphrase
 
 
 def register(cli: click.Group) -> None:
@@ -18,7 +18,9 @@ def register(cli: click.Group) -> None:
     @click.argument("file_path", type=click.Path(exists=True))
     @click.option("--title", required=True)
     @click.option("--description", default="")
-    @click.option("--privacy", default="private", type=click.Choice(["private", "unlisted", "public"]))
+    @click.option(
+        "--privacy", default="private", type=click.Choice(["private", "unlisted", "public"])
+    )
     @click.option("--json", "as_json", is_flag=True)
     def upload_prepare(
         file_path: str, title: str, description: str, privacy: str, as_json: bool
@@ -40,8 +42,10 @@ def register(cli: click.Group) -> None:
     @click.argument("file_path", type=click.Path(exists=True))
     @click.option("--title", required=True)
     @click.option("--description", default="")
-    @click.option("--privacy", default="private", type=click.Choice(["private", "unlisted", "public"]))
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option(
+        "--privacy", default="private", type=click.Choice(["private", "unlisted", "public"])
+    )
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True, help="Реальная загрузка")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
@@ -79,9 +83,7 @@ def register(cli: click.Group) -> None:
                 click.echo(result.get("message", "dry-run"))
             return
 
-        if not passphrase:
-            click.echo("Нужен --passphrase")
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
 
         from aiyoutubehands.service_factory import build_youtube_service
 

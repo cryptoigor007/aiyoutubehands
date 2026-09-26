@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import sys
 
 import click
+
+from aiyoutubehands.commands.security import require_passphrase
 
 
 def register(cli: click.Group) -> None:
@@ -14,7 +15,7 @@ def register(cli: click.Group) -> None:
         """Канал."""
 
     @channel.command("info")
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
     def channel_info(passphrase: str | None, dry_run: bool, as_json: bool) -> None:
@@ -22,8 +23,7 @@ def register(cli: click.Group) -> None:
             data = {"dry_run": True, "message": "Нужен --no-dry-run + --passphrase"}
             click.echo(json.dumps(data, ensure_ascii=False) if as_json else "channel info: dry-run")
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)

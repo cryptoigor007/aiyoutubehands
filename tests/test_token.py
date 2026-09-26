@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from aiyoutubehands.token import (
+    EncryptedJsonStore,
     TokenError,
     TokenStore,
     TokenData,
@@ -103,3 +104,14 @@ def test_versioned_blob_magic(tmp_path: Path) -> None:
     TokenStore(path=path, key=key).save(TokenData(access_token="a", refresh_token="r", expires_at=1))
     raw = path.read_bytes()
     assert raw.startswith(b"AYH1")
+
+
+def test_encrypted_json_store_roundtrip_and_permissions(tmp_path: Path) -> None:
+    path = tmp_path / "client_secrets.age"
+    EncryptedJsonStore(path, passphrase="secret-pass").save(
+        {"client_id": "client-id", "client_secret": "client-secret"}
+    )
+    assert b"client-secret" not in path.read_bytes()
+    assert path.stat().st_mode & 0o777 == 0o600
+    loaded = EncryptedJsonStore(path, passphrase="secret-pass").load()
+    assert loaded["client_id"] == "client-id"

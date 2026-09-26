@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import sys
 
 import click
+
+from aiyoutubehands.commands.security import require_passphrase
 
 
 def register(cli: click.Group) -> None:
@@ -15,18 +16,19 @@ def register(cli: click.Group) -> None:
 
     @video.command("info")
     @click.argument("video_id")
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
-    def video_info(
-        video_id: str, passphrase: str | None, dry_run: bool, as_json: bool
-    ) -> None:
+    def video_info(video_id: str, passphrase: str | None, dry_run: bool, as_json: bool) -> None:
         if dry_run:
             data = {"dry_run": True, "video_id": video_id}
-            click.echo(json.dumps(data, ensure_ascii=False) if as_json else f"video info {video_id}: dry-run")
+            click.echo(
+                json.dumps(data, ensure_ascii=False)
+                if as_json
+                else f"video info {video_id}: dry-run"
+            )
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -51,17 +53,14 @@ def register(cli: click.Group) -> None:
 
     @video.command("publish")
     @click.argument("video_id")
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
-    def video_publish(
-        video_id: str, passphrase: str | None, yes: bool, dry_run: bool
-    ) -> None:
+    def video_publish(video_id: str, passphrase: str | None, yes: bool, dry_run: bool) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -74,7 +73,7 @@ def register(cli: click.Group) -> None:
     @video.command("schedule")
     @click.argument("video_id")
     @click.argument("publish_at")
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def video_schedule(
@@ -88,8 +87,7 @@ def register(cli: click.Group) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -101,17 +99,14 @@ def register(cli: click.Group) -> None:
 
     @video.command("delete")
     @click.argument("video_id")
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
-    def video_delete(
-        video_id: str, passphrase: str | None, yes: bool, dry_run: bool
-    ) -> None:
+    def video_delete(video_id: str, passphrase: str | None, yes: bool, dry_run: bool) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -124,7 +119,7 @@ def register(cli: click.Group) -> None:
     @video.command("thumbnail")
     @click.argument("video_id")
     @click.argument("image_path", type=click.Path(exists=True))
-    @click.option("--passphrase", default=None, envvar="AYH_TOKEN_PASSPHRASE")
+    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def video_thumbnail(
@@ -137,8 +132,7 @@ def register(cli: click.Group) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        if not passphrase:
-            sys.exit(2)
+        passphrase = require_passphrase(passphrase)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)

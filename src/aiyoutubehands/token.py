@@ -261,3 +261,54 @@ class TokenStore:
         self.save(data)
         self.audit("rotate", detail="access_token refreshed")
         return data
+
+
+class EncryptedJsonStore:
+    """Passphrase-encrypted JSON storage for OAuth client configuration.
+
+    OAuth desktop client metadata is not treated as an application secret by
+    Google, but keeping it encrypted prevents it from becoming another
+    readable credential file on the user's disk.
+    """
+
+    def __init__(self, path: Path | str, *, passphrase: str) -> None:
+        if not passphrase:
+            raise TokenError("Нужен пароль локального хранилища", code="TOKEN_BAD_KEY")
+        self.path = Path(path)
+        self._passphrase = passphrase
+
+    def save(self, data: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        key, salt = derive_key_from_passphrase(self._passphrase)
+        payload = encrypt_bytes(raw, key)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_bytes(pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt))
+        tmp.chmod(0o600)
+        tmp.replace(self.path)
+        self.path.chmod(0o600)
+
+    def load(self) -> dict[str, Any]:
+        if not self.path.is_file():
+            raise TokenError(
+                f"Зашифрованный файл OAuth-клиента не найден: {self.path}",
+                code="CLIENT_SECRETS_MISSING",
+                action="Импортируйте JSON: ayh auth import-client-secrets --source <файл>",
+            )
+        mode, salt, payload = unpack_blob(self.path.read_bytes())
+        if mode != BLOB_MODE_PASSPHRASE or salt is None:
+            raise TokenError(
+                "Файл OAuth-клиента должен быть зашифрован паролем",
+                code="CLIENT_SECRETS_UNENCRYPTED",
+            )
+        key, _ = derive_key_from_passphrase(self._passphrase, salt)
+        raw = decrypt_bytes(payload, key)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception as exc:
+            raise TokenError(
+                "Повреждённый JSON OAuth-клиента", code="CLIENT_SECRETS_INVALID"
+            ) from exc
+        if not isinstance(data, dict):
+            raise TokenError("Неверный формат OAuth-клиента", code="CLIENT_SECRETS_INVALID")
+        return data

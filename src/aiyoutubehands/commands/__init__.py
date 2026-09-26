@@ -14,9 +14,11 @@ def register_all(cli: click.Group) -> None:
         captions_cmd,
         channel_cmd,
         comments_cmd,
+        connect_cmd,
         doctor_cmd,
         playlist_cmd,
         quota_cmd,
+        setup_cmd,
         upload_cmd,
         video_cmd,
     )
@@ -24,6 +26,8 @@ def register_all(cli: click.Group) -> None:
     doctor_cmd.register(cli)
     calendar_cmd.register(cli)
     quota_cmd.register(cli)
+    setup_cmd.register(cli)
+    connect_cmd.register(cli)
     auth_cmd.register(cli)
     channel_cmd.register(cli)
     video_cmd.register(cli)
