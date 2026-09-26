@@ -1,0 +1,26 @@
+# AI YouTube Hands — example configuration
+# Copy to ~/.config/aiyoutubehands/config.yaml and edit
+
+channel:
+  expected_channel_id: "UC_xxxxxxxxxxxxxxxxxxxxxx"  # required for safety
+
+auth:
+  # Encrypted local OAuth client vault. Create it with `ayh auth import-client-secrets`.
+  client_secrets_file: "~/.config/aiyoutubehands/client_secrets.age"
+  token_file: "~/.config/aiyoutubehands/token.age"
+
+quota:
+  daily_limit: 10000
+  force_quota: false
+
+ai:
+  default_provider: "local"  # local | openai | anthropic | gemini
+  allow_cloud: false
+  # openai_api_key: "sk-..."   # only if allow_cloud=true
+
+logging:
+  level: "INFO"
+  json_output: true
+
+calendar:
+  db_path: "~/.local/state/aiyoutubehands/calendar.db"

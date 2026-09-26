@@ -1,0 +1,176 @@
+"""Resumable YouTube video upload."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from aiyoutubehands.logging import get_logger
+from aiyoutubehands.models.youtube import VideoSnippet, VideoStatus
+from aiyoutubehands.quota import QuotaEngine
+
+log = get_logger(__name__)
+
+UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+COST_INSERT = 1600
+
+
+class UploadError(Exception):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "UPLOAD_ERROR",
+        action: str = "Проверьте файл и квоту",
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.action = action
+        self.retryable = retryable
+
+
+@dataclass
+class UploadPlan:
+    file_path: Path
+    size: int
+    sha256: str
+    snippet: VideoSnippet
+    status: VideoStatus
+    dry_run: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "file": str(self.file_path),
+            "size": self.size,
+            "sha256": self.sha256,
+            "title": self.snippet.title,
+            "privacy": self.status.privacy_status,
+            "dry_run": self.dry_run,
+        }
+
+
+def prepare_upload(
+    file_path: Path | str,
+    title: str,
+    description: str = "",
+    tags: list[str] | None = None,
+    privacy: str = "private",
+    publish_at: str | None = None,
+    dry_run: bool = True,
+) -> UploadPlan:
+    path = Path(file_path)
+    if not path.is_file():
+        raise UploadError(f"Файл не найден: {path}", code="FILE_NOT_FOUND")
+    size = path.stat().st_size
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return UploadPlan(
+        file_path=path,
+        size=size,
+        sha256=h.hexdigest(),
+        snippet=VideoSnippet(title=title, description=description, tags=tags or []),
+        status=VideoStatus(privacy_status=privacy, publish_at=publish_at),
+        dry_run=dry_run,
+    )
+
+
+def execute_upload_dry_run(plan: UploadPlan) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "dry_run": True,
+        "message": "Загрузка не выполнена (dry-run)",
+        "plan": plan.to_dict(),
+        "video_id": None,
+    }
+
+
+def execute_resumable_upload(
+    plan: UploadPlan,
+    access_token: str,
+    quota: QuotaEngine | None = None,
+    *,
+    yes: bool = False,
+    chunk_size: int = 256 * 1024 * 10,
+) -> dict[str, Any]:
+    """Real resumable upload to YouTube. Requires --yes and non-dry-run plan."""
+    if plan.dry_run:
+        return execute_upload_dry_run(plan)
+    if not yes:
+        raise UploadError(
+            "Реальная загрузка требует --yes",
+            code="CONFIRM_REQUIRED",
+            action="Передайте --yes",
+        )
+    if quota is not None:
+        quota.check(COST_INSERT)
+
+    metadata = {
+        "snippet": plan.snippet.to_api(),
+        "status": plan.status.to_api(),
+    }
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Length": str(plan.size),
+        "X-Upload-Content-Type": "application/octet-stream",
+    }
+    params = {"uploadType": "resumable", "part": "snippet,status"}
+
+    with httpx.Client(timeout=120.0) as client:
+        init = client.post(UPLOAD_URL, params=params, headers=headers, json=metadata)
+        if init.status_code not in (200, 201):
+            raise UploadError(
+                f"Не удалось начать resumable upload: {init.status_code} {init.text[:300]}",
+                code="UPLOAD_INIT_FAILED",
+                retryable=True,
+            )
+        session_url = init.headers.get("Location")
+        if not session_url:
+            raise UploadError("Нет Location для resumable session", code="UPLOAD_NO_SESSION")
+
+        sent = 0
+        with plan.file_path.open("rb") as f:
+            while sent < plan.size:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                start = sent
+                end = sent + len(chunk) - 1
+                put_headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Length": str(len(chunk)),
+                    "Content-Type": "application/octet-stream",
+                    "Content-Range": f"bytes {start}-{end}/{plan.size}",
+                }
+                put = client.put(session_url, headers=put_headers, content=chunk)
+                if put.status_code in (200, 201):
+                    data = put.json()
+                    video_id = str(data.get("id") or "")
+                    if quota is not None:
+                        quota.consume("videos.insert", COST_INSERT)
+                    log.info("upload_complete", video_id=video_id)
+                    return {
+                        "ok": True,
+                        "dry_run": False,
+                        "video_id": video_id,
+                        "plan": plan.to_dict(),
+                        "raw": data,
+                    }
+                if put.status_code == 308:
+                    sent = end + 1
+                    continue
+                raise UploadError(
+                    f"Ошибка загрузки chunk: {put.status_code} {put.text[:300]}",
+                    code="UPLOAD_CHUNK_FAILED",
+                    retryable=True,
+                )
+
+    raise UploadError("Загрузка не завершилась", code="UPLOAD_INCOMPLETE")
