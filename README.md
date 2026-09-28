@@ -60,8 +60,8 @@ PYTHONPATH=src python3 -m aiyoutubehands.main auth login --yes
 ### process (Shorts Maker)
 
 1. `ayh process analyze --path /path/to/ShortsMaker` — план + квота  
-2. Пользователь пишет точно: `подтверждаю план от ДД.ММ.ГГГГ`  
-3. `ayh process apply --path ... --confirm "подтверждаю план от …" --no-dry-run --yes`  
+2. Пользователь пишет точно: `подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>`  
+3. `ayh process apply --path ... --confirm "подтверждаю план от … #<хэш>" --no-dry-run --yes`  
 
 Либо интерактивно: `ayh process run --path ...`.
 

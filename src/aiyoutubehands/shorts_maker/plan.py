@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -58,8 +60,38 @@ class ProcessPlan:
     def actionable_items(self) -> list[PlanItem]:
         return [i for i in self.items if i.actionable]
 
+    @property
+    def fingerprint(self) -> str:
+        return plan_fingerprint(self.items)
+
     def total_quota(self) -> int:
         return sum(i.estimated_quota for i in self.actionable_items())
+
+
+def plan_fingerprint(items: list[PlanItem]) -> str:
+    """Короткий sha256 по содержимому ACTIONABLE-элементов плана.
+
+    Именно это подтверждает оператор: какие видео и что именно в них будет
+    записано. Пропущенные элементы не входят. Порядок фиксирован сортировкой
+    по video_id, поэтому хэш не зависит от порядка обхода папок.
+    """
+    payload = [
+        {
+            "video_id": i.video.id if i.video else None,
+            "title": i.new_title,
+            "description": i.new_description,
+            "tags": list(i.new_tags),
+            "thumbnail": Path(i.thumbnail_path).name if i.thumbnail_path else None,
+            "publish_at": i.publish_at,
+            "playlist_id": i.playlist_id,
+        }
+        for i in sorted(
+            (i for i in items if i.actionable),
+            key=lambda i: (i.video.id if i.video else ""),
+        )
+    ]
+    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:12]
 
 
 def build_plan(
@@ -171,7 +203,7 @@ def build_plan(
         projection = quota.project(ops)
 
     phrase_date = now.strftime("%d.%m.%Y")
-    confirm = f"подтверждаю план от {phrase_date}"
+    confirm = f"подтверждаю план от {phrase_date} #{plan_fingerprint(items)}"
 
     return ProcessPlan(
         created_at=now,

@@ -3,12 +3,46 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import click
 
 from aiyoutubehands.client import require_access_token
 from aiyoutubehands.commands.security import require_passphrase
+
+
+_CONFIRM_RE = re.compile(r"^подтверждаю план от (\d{2}\.\d{2}\.\d{4}) #([0-9a-f]{12})$")
+
+
+def _parse_confirm(confirm: str) -> tuple[str, str]:
+    """Разобрать фразу подтверждения в (дата, хэш плана).
+
+    Фраза обязана включать хэш: без него подтверждение не отличает один план
+    от другого, и оператор может подтвердить один набор, а применить другой.
+    """
+    m = _CONFIRM_RE.match((confirm or "").strip())
+    if not m:
+        raise click.ClickException(
+            "Фраза должна быть: «подтверждаю план от ДД.ММ.ГГГГ #<хэш>».\n"
+            "Хэш печатается вместе с планом (analyze или apply --dry-run)."
+        )
+    return m.group(1), m.group(2)
+
+
+def _require_fingerprint_match(plan: object, expected: str) -> None:
+    """Отказ, если текущий план не тот, который подтвердили."""
+    from aiyoutubehands.shorts_maker.plan import ProcessPlan
+
+    if not isinstance(plan, ProcessPlan):
+        raise TypeError("plan должен быть ProcessPlan")
+    if plan.fingerprint != expected:
+        raise click.ClickException(
+            "План изменился после подтверждения (хэш не совпал).\n"
+            f"Подтверждён: {expected}\n"
+            f"Сейчас:      {plan.fingerprint}\n"
+            "Покажите план заново и подтвердите новый хэш."
+        )
 
 
 def register(cli: click.Group) -> None:
@@ -158,7 +192,7 @@ def register(cli: click.Group) -> None:
     @click.option(
         "--confirm",
         required=True,
-        help='Точная фраза: «подтверждаю план от ДД.ММ.ГГГГ»',
+        help='Точная фраза: «подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>»',
     )
     @click.option(
         "--path",
@@ -173,6 +207,13 @@ def register(cli: click.Group) -> None:
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--playlist", default=None, help="ID плейлиста (опционально)")
     @click.option("--allow-ai", is_flag=True)
+    @click.option(
+        "--plan",
+        "plan_file",
+        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+        default=None,
+        help="Файл analyze --save-plan для сверки: применится только он",
+    )
     def process_apply(
         confirm: str,
         root_path: Path,
@@ -182,6 +223,7 @@ def register(cli: click.Group) -> None:
         dry_run: bool,
         playlist: str | None,
         allow_ai: bool,
+        plan_file: Path | None,
     ) -> None:
         """Применить план после точного подтверждения."""
         from datetime import datetime
@@ -191,16 +233,14 @@ def register(cli: click.Group) -> None:
         from aiyoutubehands.shorts_maker.folder_scanner import scan_root
         from aiyoutubehands.shorts_maker.ledger import ProcessedLedger
         from aiyoutubehands.shorts_maker.matcher import match_candidates
-        from aiyoutubehands.shorts_maker.plan import build_plan
+        from aiyoutubehands.shorts_maker.plan import build_plan, render_plan_table
         from aiyoutubehands.shorts_maker.processor import apply_plan
 
         expected_date = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
-        expected = f"подтверждаю план от {expected_date}"
-        if confirm.strip() != expected:
+        phrase_date, phrase_fp = _parse_confirm(confirm)
+        if phrase_date != expected_date:
             raise click.ClickException(
-                f"Неверная фраза подтверждения.\n"
-                f"Ожидается точно: «{expected}»\n"
-                f"Получено: «{confirm.strip()}»"
+                f"Дата во фразе не сегодняшняя: {phrase_date}, ожидается {expected_date}"
             )
 
         if not yes and not dry_run:
@@ -246,11 +286,29 @@ def register(cli: click.Group) -> None:
                     "Квота будет превышена. Дождитесь сброса или уменьшите план."
                 )
 
+            # Подтверждение привязано к содержимому: план, показанный оператору,
+            # и план, который применяется, обязаны совпасть.
+            _require_fingerprint_match(plan, phrase_fp)
+
+            if plan_file is not None:
+                saved = json.loads(plan_file.read_text(encoding="utf-8"))
+                saved_fp = str(saved.get("fingerprint") or "")
+                if saved_fp != plan.fingerprint:
+                    raise click.ClickException(
+                        f"План из {plan_file} не совпадает с текущим.\n"
+                        f"В файле: {saved_fp or '<нет поля fingerprint>'}\n"
+                        f"Сейчас:  {plan.fingerprint}\n"
+                        "Запустите analyze заново и подтвердите актуальный план."
+                    )
+
             actionable = plan.actionable_items()
             if not actionable:
                 click.echo("Нет видео для обработки.")
                 return
 
+            # План всегда показывается перед применением.
+            click.echo(render_plan_table(plan))
+            click.echo(f"Хэш плана: {plan.fingerprint}")
             click.echo(f"Применяю {len(actionable)} видео (dry_run={dry_run}) …")
             token = require_access_token(client.access_token)
             report = apply_plan(
@@ -426,6 +484,7 @@ def _plan_to_dict(plan: object) -> dict:
         "created_at": plan.created_at.isoformat(),
         "root_path": str(plan.root_path),
         "confirm_phrase": plan.confirm_phrase,
+        "fingerprint": plan.fingerprint,
         "quota": plan.quota_projection,
         "items": [
             {

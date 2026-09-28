@@ -23,7 +23,7 @@ FolderScanner → Matcher → MetadataExtractor → Scheduler → Plan
 ```
 
 - **Never** calls `videos.insert` / `videos.delete`
-- Mutations only after exact phrase `подтверждаю план от ДД.ММ.ГГГГ` + `--yes`
+- Mutations only after exact phrase `подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>` + `--yes`
 - Quota checked before each write; stop on first 403/429
 - `publishAt` only for private; on `invalidPublishAt` retry without schedule
 - Playlists: opt-in (`--playlist` or interactive prompt); default none for Shorts

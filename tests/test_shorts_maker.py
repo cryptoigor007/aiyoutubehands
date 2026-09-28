@@ -834,3 +834,95 @@ def test_public_with_views_skipped(tmp_path: Path) -> None:
     results = match_candidates([cand], [video])
     assert results[0].reason != "ok"
     assert "просмотры" in results[0].reason or "public" in results[0].reason or "privacy" in results[0].reason
+
+
+def _mk_video(vid: str, title: str) -> VideoResource:
+    return VideoResource.from_api({
+        "id": vid,
+        "snippet": {
+            "title": title,
+            "description": "",
+            "publishedAt": "",
+            "channelId": "UC_test",
+        },
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT30S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+        "statistics": {"viewCount": "0"},
+    })
+
+
+def test_plan_fingerprint_tracks_actionable_content(tmp_path: Path) -> None:
+    """Фраза подтверждения должна быть привязана к содержимому плана.
+
+    Регресс: confirm_phrase содержала только дату, поэтому между analyze и apply
+    состав плана мог измениться незаметно — оператор подтверждал один набор,
+    а применялся другой.
+    """
+    root = tmp_path / "sm"
+    root.mkdir()
+    _make_folder(root, "ш1 Alpha", titles="Alpha\n\nОписание альфы")
+    _make_folder(root, "ш2 Beta", titles="Beta\n\nОписание беты")
+    _make_folder(root, "ш3 Skip", marker="PEREDELAT")
+
+    matches = match_candidates(scan_root(root), [_mk_video("vA", "Alpha"), _mk_video("vB", "Beta")])
+    plan = build_plan(matches, root_path=root, quota=QuotaEngine(db_path=tmp_path / "q.db"))
+
+    assert len(plan.actionable_items()) == 2
+    fp = plan.fingerprint
+    assert len(fp) == 12
+    assert plan.confirm_phrase.endswith(f"#{fp}")
+
+    # Изменение actionable-элемента меняет хэш
+    plan.actionable_items()[0].new_title = "Совсем другой заголовок"
+    assert plan.fingerprint != fp
+
+
+def test_plan_fingerprint_ignores_skipped_items(tmp_path: Path) -> None:
+    """Хэш покрывает только то, что будет записано."""
+    root = tmp_path / "sm"
+    root.mkdir()
+    _make_folder(root, "ш1 Alpha", titles="Alpha\n\nОписание альфы")
+    _make_folder(root, "ш2 Skip", marker="PEREDELAT")
+
+    matches = match_candidates(scan_root(root), [_mk_video("vA", "Alpha")])
+    plan = build_plan(matches, root_path=root, quota=QuotaEngine(db_path=tmp_path / "q.db"))
+    fp = plan.fingerprint
+
+    skipped = [i for i in plan.items if not i.actionable]
+    assert skipped, "нужен хотя бы один пропущенный элемент"
+    for item in skipped:
+        item.new_title = "мусор"
+    assert plan.fingerprint == fp
+
+
+def test_parse_confirm_requires_fingerprint() -> None:
+    """Фраза без хэша не принимается — иначе подтверждение ничего не значит."""
+    import click
+
+    from aiyoutubehands.commands.process_cmd import _parse_confirm
+
+    with pytest.raises(click.ClickException):
+        _parse_confirm("подтверждаю план от 01.01.2026")
+
+    date, fp = _parse_confirm("подтверждаю план от 01.01.2026 #abc123abc123")
+    assert date == "01.01.2026"
+    assert fp == "abc123abc123"
+
+
+def test_fingerprint_mismatch_is_refused(tmp_path: Path) -> None:
+    """Если план изменился после подтверждения — отказ, а не молчаливое применение."""
+    import click
+
+    from aiyoutubehands.commands.process_cmd import _require_fingerprint_match
+
+    root = tmp_path / "sm"
+    root.mkdir()
+    _make_folder(root, "ш1 Alpha", titles="Alpha\n\nОписание альфы")
+    matches = match_candidates(scan_root(root), [_mk_video("vA", "Alpha")])
+    plan = build_plan(matches, root_path=root, quota=QuotaEngine(db_path=tmp_path / "q.db"))
+
+    _require_fingerprint_match(plan, plan.fingerprint)  # совпадает — не бросает
+
+    with pytest.raises(click.ClickException):
+        _require_fingerprint_match(plan, "deadbeef0000")
