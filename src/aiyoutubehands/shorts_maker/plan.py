@@ -80,9 +80,7 @@ def build_plan(
 
     for m in matches:
         # actionable only when reason is exactly "ok" (or ok with duration note prefix)
-        actionable = m.reason == "ok" or m.reason.startswith("duration±1s") or m.reason.startswith(
-            "единственное"
-        )
+        actionable = m.reason == "ok" or m.reason.startswith("duration±1s")
         if m.video is None or not actionable or m.reason.startswith("дубликат"):
             metas.append(None)
             videos_for_slots.append(None)

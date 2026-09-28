@@ -231,11 +231,6 @@ def match_candidates(
                         )
                     )
                     continue
-            if matched is None and len(recent) == 1:
-                matched = recent[0]
-                method = "duration_date"
-                reason = "единственное недавнее видео"
-
         if matched is None:
             results.append(
                 MatchResult(

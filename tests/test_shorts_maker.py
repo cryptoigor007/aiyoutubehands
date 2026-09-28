@@ -327,6 +327,40 @@ def test_match_by_duration(tmp_path: Path) -> None:
     assert results[0].video.id == "va"
 
 
+def test_sole_recent_video_is_not_matched_without_title_evidence(
+    tmp_path: Path,
+) -> None:
+    """Папка без совпадения по заголовку не должна «захватывать» видео.
+
+    Регресс: при единственном «недавнем» видео в выборке папка сопоставлялась
+    с ним без доказательств, и план помечал это готовым к записи. Правила
+    репозитория (AGENT_PROMPT_PROCESS.md §0.1.3, §6) требуют при сомнении
+    пропускать, а не угадывать.
+    """
+    d = _make_folder(tmp_path, "ш7 Совершенно другой ролик")
+    cand = scan_folder(d)
+    video = VideoResource.from_api({
+        "id": "sole1",
+        "snippet": {"title": "raw_filename_1234", "description": "", "publishedAt": ""},
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT30S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+        "statistics": {"viewCount": "0"},
+    })
+
+    import aiyoutubehands.shorts_maker.media as media_mod
+
+    orig = media_mod.probe_duration_seconds
+    media_mod.probe_duration_seconds = lambda _p: None  # ffprobe недоступен
+    try:
+        results = match_candidates([cand], [video])
+    finally:
+        media_mod.probe_duration_seconds = orig  # type: ignore[assignment]
+
+    assert results[0].video is None
+    assert results[0].reason == "не сопоставлено"
+
+
 def test_apply_plan_dry_run(tmp_path: Path) -> None:
     """Processor dry-run does not require network; spends estimated quota only."""
     from aiyoutubehands.client import HttpClient
