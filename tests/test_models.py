@@ -20,6 +20,37 @@ def test_video_snippet() -> None:
     assert d["tags"] == ["a", "b"]
 
 
+def test_snippet_omits_unset_description() -> None:
+    """Смена заголовка не должна затирать описание живого видео.
+
+    Регресс: to_api() всегда отправляла description (по умолчанию ""), поэтому
+    videos.update с part=snippet очищал описание, которого никто не касался.
+    """
+    d = VideoSnippet(title="Новый заголовок").to_api()
+    assert "description" not in d
+
+
+def test_snippet_sends_explicitly_empty_description() -> None:
+    """Явно пустое описание отправляется — сентинел отличает «не задано» от «очистить»."""
+    assert VideoSnippet(title="T", description="").to_api()["description"] == ""
+
+
+def test_status_omits_made_for_kids_when_unset() -> None:
+    """Публикация/расписание не должны молча сбрасывать флаг COPPA.
+
+    Регресс: to_api() всегда отправляла selfDeclaredMadeForKids=False,
+    поэтому любой videos.update со status снимал self-declared «для детей».
+    """
+    d = VideoStatus(privacy_status="private").to_api()
+    assert "selfDeclaredMadeForKids" not in d
+
+
+def test_status_sends_explicitly_set_made_for_kids() -> None:
+    """Явно заданный флаг по-прежнему уходит в API."""
+    d = VideoStatus(privacy_status="private", self_declared_made_for_kids=True).to_api()
+    assert d["selfDeclaredMadeForKids"] is True
+
+
 def test_video_resource_from_api() -> None:
     raw = {
         "id": "vid123",

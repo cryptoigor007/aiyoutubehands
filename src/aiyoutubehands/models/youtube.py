@@ -9,7 +9,9 @@ from typing import Any
 @dataclass
 class VideoSnippet:
     title: str = ""
-    description: str = ""
+    # None = «поле не задано» и НЕ отправляется; "" = «очистить описание».
+    # Раньше значение по умолчанию было "", и это затирало описание живого видео.
+    description: str | None = None
     tags: list[str] = field(default_factory=list)
     category_id: str = "22"
     channel_id: str = ""
@@ -19,9 +21,10 @@ class VideoSnippet:
     def to_api(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "title": self.title,
-            "description": self.description,
             "categoryId": self.category_id,
         }
+        if self.description is not None:
+            d["description"] = self.description
         if self.tags:
             d["tags"] = self.tags
         return d
@@ -43,13 +46,16 @@ class VideoSnippet:
 class VideoStatus:
     privacy_status: str = "private"
     publish_at: str | None = None
-    self_declared_made_for_kids: bool = False
+    # None = «не задано» и НЕ отправляется; True/False — явная установка.
+    # Раньше по умолчанию был False, и любой update со status снимал COPPA-флаг.
+    self_declared_made_for_kids: bool | None = None
 
     def to_api(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "privacyStatus": self.privacy_status,
-            "selfDeclaredMadeForKids": self.self_declared_made_for_kids,
         }
+        if self.self_declared_made_for_kids is not None:
+            d["selfDeclaredMadeForKids"] = self.self_declared_made_for_kids
         if self.publish_at:
             d["publishAt"] = self.publish_at
         return d

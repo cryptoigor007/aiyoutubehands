@@ -481,6 +481,78 @@ def test_marker_survives_description_truncation(tmp_path: Path) -> None:
     assert len(sent) <= 5000
 
 
+def test_scheduling_does_not_force_made_for_kids_false(tmp_path: Path) -> None:
+    """Расписание не должно молча выставлять selfDeclaredMadeForKids=False.
+
+    Регресс: processor собирал VideoStatus с self_declared_made_for_kids=False,
+    и каждый videos.update со status снимал self-declared флаг «для детей»,
+    хотя AGENT_PROMPT_PROCESS.md §2.4 запрещает менять madeForKids без просьбы.
+    """
+    from aiyoutubehands.quota import QuotaEngine
+    from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
+    from aiyoutubehands.shorts_maker.processor import apply_plan
+
+    captured: list = []
+
+    class _CapturingYT:
+        def __init__(self) -> None:
+            self.quota = QuotaEngine(db_path=tmp_path / "q.db")
+
+        def update_video(self, vid, *, snippet=None, status=None, dry_run=False, yes=False):
+            captured.append(status)
+            return None
+
+    d = _make_folder(tmp_path, "ш1 Расписание")
+    cand = scan_folder(d)
+    video = VideoResource.from_api({
+        "id": "vid_sched",
+        "snippet": {
+            "title": "Расписание",
+            "description": "",
+            "publishedAt": "",
+            "channelId": "UC_test",
+        },
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT40S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+    })
+    item = PlanItem(
+        index=0,
+        folder=cand,
+        video=video,
+        match_method="title",
+        new_title="Расписание",
+        new_description="Описание",
+        new_tags=["a"],
+        thumbnail_path=None,
+        publish_at="2026-10-01T09:00:00Z",
+        status="к обработке",
+        estimated_quota=50,
+    )
+    plan = ProcessPlan(
+        created_at=datetime.now(MSK),
+        root_path=tmp_path,
+        items=[item],
+        quota_projection={},
+        confirm_phrase="подтверждаю план от 01.01.2026",
+    )
+
+    apply_plan(
+        plan,
+        _CapturingYT(),
+        access_token="fake",
+        dry_run=True,
+        yes=True,
+        ledger=ProcessedLedger(db_path=tmp_path / "p.db"),
+    )
+
+    assert len(captured) == 1
+    assert captured[0] is not None
+    sent_status = captured[0].to_api()
+    assert sent_status["publishAt"] == "2026-10-01T09:00:00Z"
+    assert "selfDeclaredMadeForKids" not in sent_status
+
+
 def test_is_already_styled_with_playlist() -> None:
     v = VideoResource.from_api({
         "id": "inpl",

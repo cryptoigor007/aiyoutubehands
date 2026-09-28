@@ -165,7 +165,6 @@ def _apply_one(
         status = VideoStatus(
             privacy_status="private",
             publish_at=item.publish_at,
-            self_declared_made_for_kids=False,
         )
 
     yt.quota.check(50)  # videos.update
