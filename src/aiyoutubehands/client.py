@@ -46,6 +46,23 @@ class CircuitOpenError(ClientError):
         )
 
 
+def require_access_token(token: str | None) -> str:
+    """Return a non-empty access token or raise NOT_AUTHENTICATED.
+
+    Заменяет голые ``assert client.access_token``: они исчезают под
+    ``python -O``, после чего запрос уходил в сеть без авторизации и падал
+    401 где-то в середине операции вместо понятной ошибки в начале.
+    """
+    if not token:
+        raise ClientError(
+            "Нет access_token — авторизация не выполнена",
+            code="NOT_AUTHENTICATED",
+            action="Выполните: ayh auth login",
+            retryable=False,
+        )
+    return token
+
+
 def map_http_error(status: int, body: str = "") -> ClientError:
     body_l = body.lower()
     reason = ""
@@ -184,6 +201,7 @@ class HttpClient:
             log.info("http_dry_run", method=method, url=url, params=params)
             return {"dry_run": True, "method": method, "url": url, "params": params}
 
+        require_access_token(self.access_token)
         self._ensure_circuit()
 
         last_exc: Exception | None = None

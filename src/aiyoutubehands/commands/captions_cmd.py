@@ -6,6 +6,7 @@ import json
 
 import click
 
+from aiyoutubehands.client import require_access_token
 from aiyoutubehands.commands.security import require_passphrase
 
 
@@ -72,13 +73,13 @@ def register(cli: click.Group) -> None:
 
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
-            assert client.access_token
+            token = require_access_token(client.access_token)
             yt.upload_caption(
                 video_id,
                 file_path,
                 language=language,
                 name=name,
-                access_token=client.access_token,
+                access_token=token,
                 dry_run=False,
                 yes=True,
             )

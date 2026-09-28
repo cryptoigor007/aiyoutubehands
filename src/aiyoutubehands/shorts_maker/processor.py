@@ -81,7 +81,8 @@ def apply_plan(
         ledger = ProcessedLedger()
 
     for item in plan.actionable_items():
-        assert item.video is not None
+        if item.video is None:
+            raise ClientError("Элемент плана без видео", code="BAD_REQUEST")
         vid = item.video.id
         # Local Shorts Maker files are read-only for process
         if item.thumbnail_path is not None:
@@ -143,7 +144,8 @@ def _apply_one(
     run_id: str,
 ) -> int:
     """Returns estimated/actual quota units spent for this video."""
-    assert item.video is not None
+    if item.video is None:
+        raise ClientError("Элемент плана без видео", code="BAD_REQUEST")
     vid = item.video.id
     spent = 0
 

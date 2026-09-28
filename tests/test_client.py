@@ -69,3 +69,42 @@ def test_client_error_retry_after_attr() -> None:
     assert err.retryable is True
     err.retry_after = 1.5
     assert err.retry_after == 1.5
+
+
+class _FakeResp401:
+    status_code = 401
+    text = "Unauthorized"
+    headers: dict = {}
+    content = b"{}"
+
+    def json(self) -> dict:
+        return {}
+
+
+def test_request_without_token_fails_fast(monkeypatch) -> None:
+    """Без токена запрос отвергается до сети, а не падает 401 в середине.
+
+    Регресс: команды полагались на `assert client.access_token`, который под
+    `python -O` исчезает, и операция уходила в сеть без авторизации.
+    """
+    import aiyoutubehands.client as client_mod
+
+    calls: list[str] = []
+
+    class _FakeHTTP:
+        def __init__(self, *a, **k): ...
+
+        def request(self, *a, **k):
+            calls.append("request")
+            return _FakeResp401()
+
+        def close(self): ...
+
+    monkeypatch.setattr(client_mod.httpx, "Client", _FakeHTTP)
+
+    c = HttpClient(base_url="https://example.invalid", access_token="")
+    with pytest.raises(ClientError) as ei:
+        c.request("POST", "videos", json_body={"id": "x"})
+
+    assert ei.value.code == "NOT_AUTHENTICATED"
+    assert calls == []

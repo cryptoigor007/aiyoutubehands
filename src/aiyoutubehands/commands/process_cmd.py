@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from aiyoutubehands.client import require_access_token
 from aiyoutubehands.commands.security import require_passphrase
 
 
@@ -251,11 +252,11 @@ def register(cli: click.Group) -> None:
                 return
 
             click.echo(f"Применяю {len(actionable)} видео (dry_run={dry_run}) …")
-            assert client.access_token
+            token = require_access_token(client.access_token)
             report = apply_plan(
                 plan,
                 yt,
-                access_token=client.access_token,
+                access_token=token,
                 dry_run=dry_run,
                 yes=yes or dry_run,
                 ledger=ledger,
@@ -366,11 +367,11 @@ def register(cli: click.Group) -> None:
                     click.echo("Отмена.")
                     return
 
-            assert client.access_token
+            token = require_access_token(client.access_token)
             report = apply_plan(
                 plan,
                 yt,
-                access_token=client.access_token,
+                access_token=token,
                 dry_run=dry_run,
                 yes=True,
                 ledger=ledger,
@@ -396,7 +397,8 @@ def _resolve_playlist(value: str | None, yt: object | None = None) -> str | None
         from aiyoutubehands.models.youtube import PlaylistResource
         from aiyoutubehands.youtube import YoutubeService
 
-        assert isinstance(yt, YoutubeService)
+        if not isinstance(yt, YoutubeService):
+            raise TypeError("yt должен быть YoutubeService")
         pls = yt.list_playlists(dry_run=False)
         if not isinstance(pls, list):
             return v
@@ -418,7 +420,8 @@ def _resolve_playlist(value: str | None, yt: object | None = None) -> str | None
 def _plan_to_dict(plan: object) -> dict:
     from aiyoutubehands.shorts_maker.plan import ProcessPlan
 
-    assert isinstance(plan, ProcessPlan)
+    if not isinstance(plan, ProcessPlan):
+        raise TypeError("plan должен быть ProcessPlan")
     return {
         "created_at": plan.created_at.isoformat(),
         "root_path": str(plan.root_path),

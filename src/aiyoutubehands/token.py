@@ -171,7 +171,12 @@ class TokenStore:
         if self._passphrase is not None:
             key, used_salt = derive_key_from_passphrase(self._passphrase, salt)
             return key, used_salt
-        assert self._key is not None
+        if self._key is None:
+            raise TokenError(
+                "Не задан ни ключ, ни passphrase",
+                code="TOKEN_NO_KEY",
+                action="Передайте ключ или passphrase",
+            )
         return self._key, None
 
     def save(self, data: TokenData) -> None:

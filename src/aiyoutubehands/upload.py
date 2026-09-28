@@ -112,6 +112,13 @@ def execute_resumable_upload(
     if quota is not None:
         quota.check(COST_INSERT)
 
+    if not access_token:
+        raise UploadError(
+            "Нет access_token — авторизация не выполнена",
+            code="NOT_AUTHENTICATED",
+            action="Выполните: ayh auth login",
+        )
+
     metadata = {
         "snippet": plan.snippet.to_api(),
         "status": plan.status.to_api(),

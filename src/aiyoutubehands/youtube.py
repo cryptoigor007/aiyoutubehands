@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from aiyoutubehands.client import ClientError, HttpClient
+from aiyoutubehands.client import ClientError, HttpClient, require_access_token
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.models.youtube import (
     CaptionResource,
@@ -537,6 +537,7 @@ class YoutubeService:
             raise ClientError(f"Файл не найден: {path}", code="NOT_FOUND")
         if dry_run:
             return {"dry_run": True, "video_id": video_id, "file": str(path)}
+        require_access_token(access_token)
         self.quota.check(COST["thumbnails.set"])
         url = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
         headers = {"Authorization": f"Bearer {access_token}"}
