@@ -66,9 +66,11 @@ def register(cli: click.Group) -> None:
         yes: bool,
         dry_run: bool,
     ) -> None:
-        if dry_run or not yes:
-            click.echo("dry-run / нужен --no-dry-run --yes")
+        if dry_run:
+            click.echo("dry-run: изменения не отправляются")
             return
+        if not yes:
+            raise click.ClickException("Нужен --yes вместе с --no-dry-run")
         passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 

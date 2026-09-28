@@ -56,9 +56,11 @@ def register(cli: click.Group) -> None:
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def video_publish(video_id: str, yes: bool, dry_run: bool) -> None:
-        if dry_run or not yes:
-            click.echo("dry-run / нужен --no-dry-run --yes")
+        if dry_run:
+            click.echo("dry-run: изменения не отправляются")
             return
+        if not yes:
+            raise click.ClickException("Нужен --yes вместе с --no-dry-run")
         passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
@@ -81,9 +83,11 @@ def register(cli: click.Group) -> None:
         dry_run: bool,
     ) -> None:
         """publish_at: ISO8601, например 2026-10-01T15:00:00Z"""
-        if dry_run or not yes:
-            click.echo("dry-run / нужен --no-dry-run --yes")
+        if dry_run:
+            click.echo("dry-run: изменения не отправляются")
             return
+        if not yes:
+            raise click.ClickException("Нужен --yes вместе с --no-dry-run")
         passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
@@ -99,9 +103,11 @@ def register(cli: click.Group) -> None:
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def video_delete(video_id: str, yes: bool, dry_run: bool) -> None:
-        if dry_run or not yes:
-            click.echo("dry-run / нужен --no-dry-run --yes")
+        if dry_run:
+            click.echo("dry-run: изменения не отправляются")
             return
+        if not yes:
+            raise click.ClickException("Нужен --yes вместе с --no-dry-run")
         passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
@@ -123,9 +129,11 @@ def register(cli: click.Group) -> None:
         yes: bool,
         dry_run: bool,
     ) -> None:
-        if dry_run or not yes:
-            click.echo("dry-run / нужен --no-dry-run --yes")
+        if dry_run:
+            click.echo("dry-run: изменения не отправляются")
             return
+        if not yes:
+            raise click.ClickException("Нужен --yes вместе с --no-dry-run")
         passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 

@@ -522,12 +522,15 @@ class YoutubeService:
         yes: bool = False,
     ) -> dict[str, Any]:
         """Upload caption track (SBV/SRT/VTT etc.) via resumable-like binary POST."""
-        self._require_write(yes, dry_run, "загрузки субтитров")
+        # Проверки, не требующие сети, — до _require_write: иначе отсутствующий
+        # файл или пустой токен оплачивались бы сетевым вызовом channels.list.
         path = Path(file_path)
         if not path.is_file():
             raise ClientError(f"Файл не найден: {path}", code="NOT_FOUND")
         if dry_run:
             return {"dry_run": True, "video_id": video_id, "file": str(path)}
+        require_access_token(access_token)
+        self._require_write(yes, dry_run, "загрузки субтитров")
         self.quota.check(COST["captions.insert"])
         metadata = {
             "snippet": {
@@ -539,7 +542,7 @@ class YoutubeService:
         # multipart upload to captions endpoint
         url = "https://www.googleapis.com/upload/youtube/v3/captions"
         headers = {"Authorization": f"Bearer {access_token}"}
-        with httpx.Client(timeout=120.0) as http:
+        with httpx.Client(timeout=120.0, trust_env=False) as http:
             files = {
                 "metadata": (
                     "metadata.json",

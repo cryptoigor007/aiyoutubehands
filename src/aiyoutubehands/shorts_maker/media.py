@@ -41,11 +41,20 @@ def probe_duration_seconds(path: Path | str) -> int | None:
             log.warning("ffprobe_failed", path=str(path), stderr=proc.stderr[:200])
             return None
         data = json.loads(proc.stdout or "{}")
-        dur = (data.get("format") or {}).get("duration")
-        if dur is None:
+        fmt = data.get("format") if isinstance(data, dict) else None
+        if not isinstance(fmt, dict):
+            return None
+        dur = fmt.get("duration")
+        if isinstance(dur, bool) or not isinstance(dur, (str, int, float)):
             return None
         return int(round(float(dur)))
-    except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as exc:
+    except (
+        OSError,
+        subprocess.TimeoutExpired,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ) as exc:
         log.warning("ffprobe_error", path=str(path), error=str(exc))
         return None
 
@@ -80,11 +89,14 @@ def probe_is_vertical(path: Path | str) -> bool | None:
         if proc.returncode != 0:
             return None
         data = json.loads(proc.stdout or "{}")
-        streams = data.get("streams") or []
-        if not streams:
+        streams = data.get("streams") if isinstance(data, dict) else None
+        if not isinstance(streams, list) or not streams:
             return None
-        w = int(streams[0].get("width") or 0)
-        h = int(streams[0].get("height") or 0)
+        first = streams[0]
+        if not isinstance(first, dict):
+            return None
+        w = int(first.get("width") or 0)
+        h = int(first.get("height") or 0)
         if w <= 0 or h <= 0:
             return None
         return h > w

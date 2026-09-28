@@ -54,3 +54,29 @@ def test_projection(tmp_path: Path) -> None:
     proj = eng.project([("videos.insert", 1600), ("search.list", 100)])
     assert proj["projected_total"] == 2200
     assert proj["would_exceed"] is False
+
+
+def test_ledger_closes_its_connection(tmp_path: Path) -> None:
+    """Соединения SQLite должны закрываться, а не ждать сборщика мусора.
+
+    Регресс: `with self._connect() as conn` коммитит, но НЕ закрывает, поэтому
+    при сборке мусора летели ResourceWarning «unclosed database».
+    """
+    import gc
+    import warnings
+
+    eng = QuotaEngine(db_path=tmp_path / "q.db", daily_limit=10)
+    eng.consume("videos.list", 1)
+    assert eng.used_today() == 1
+    del eng
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        gc.collect()
+
+    unclosed = [
+        w
+        for w in caught
+        if issubclass(w.category, ResourceWarning) and "unclosed" in str(w.message)
+    ]
+    assert unclosed == []

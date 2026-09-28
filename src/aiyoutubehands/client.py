@@ -205,7 +205,6 @@ class HttpClient:
         require_access_token(self.access_token)
         self._ensure_circuit()
 
-        last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
                 resp = self._client.request(
@@ -215,43 +214,41 @@ class HttpClient:
                     json=json_body,
                     headers=self._headers(),
                 )
-                if resp.status_code >= 400:
-                    err = map_http_error(resp.status_code, resp.text)
-                    ra = resp.headers.get("Retry-After")
-                    if ra is not None:
-                        try:
-                            err.retry_after = float(ra)
-                        except ValueError:
-                            err.retry_after = None
-                    if err.retryable and attempt < self.max_retries:
-                        delay = (
-                            err.retry_after if err.retry_after is not None else 0.5 * (2**attempt)
-                        )
-                        delay = max(0.0, min(float(delay), 60.0))
-                        time.sleep(delay)
-                        last_exc = err
-                        continue
-                    self._record_failure()
-                    raise err
-                self._record_success()
-                if resp.status_code == 204 or not resp.content:
-                    return {}
-                return resp.json()  # type: ignore[no-any-return]
             except (httpx.TransportError, httpx.TimeoutException) as exc:
-                last_exc = exc
-                self._record_failure()
                 if attempt < self.max_retries:
                     time.sleep(0.5 * (2**attempt))
                     continue
+                self._record_failure()
                 raise ClientError(
                     f"Сетевая ошибка: {exc}",
                     code="NETWORK_ERROR",
                     action="Проверьте интернет",
                     retryable=True,
                 ) from exc
-        if last_exc:
-            raise last_exc
-        raise ClientError("Неизвестная ошибка запроса", code="UNKNOWN")
+
+            if resp.status_code >= 400:
+                err = map_http_error(resp.status_code, resp.text)
+                ra = resp.headers.get("Retry-After")
+                if ra is not None:
+                    try:
+                        err.retry_after = float(ra)
+                    except ValueError:
+                        err.retry_after = None
+                # 429 не повторяем автоматически: правила проекта требуют
+                # остановиться на первом 429, а не ретраить пачками.
+                if err.retryable and err.code != "RATE_LIMIT" and attempt < self.max_retries:
+                    delay = err.retry_after if err.retry_after is not None else 0.5 * (2**attempt)
+                    delay = max(0.0, min(float(delay), 60.0))
+                    time.sleep(delay)
+                    continue
+                self._record_failure()
+                raise err
+
+            self._record_success()
+            if resp.status_code == 204 or not resp.content:
+                return {}
+            return resp.json()  # type: ignore[no-any-return]
+        raise ClientError("Неизвестная ошибка запроса", code="UNKNOWN", retryable=False)
 
     def get(self, path: str, **kwargs: Any) -> dict[str, Any]:
         return self.request("GET", path, **kwargs)
