@@ -54,15 +54,35 @@ class YoutubeService:
         self.client = client
         self.quota = quota
         self.expected_channel_id = expected_channel_id
+        self._channel_verified = False
 
     def _guard_channel(self, channel_id: str) -> None:
-        if channel_id and self.expected_channel_id and channel_id != self.expected_channel_id:
+        if not self.expected_channel_id:
+            raise ClientError(
+                "Не задан channel.expected_channel_id — операция запрещена",
+                code="CHANNEL_NOT_CONFIGURED",
+                action="Укажите channel.expected_channel_id в config.yaml",
+                retryable=False,
+            )
+        if channel_id != self.expected_channel_id:
             raise ClientError(
                 f"channel_id mismatch: got {channel_id}, expected {self.expected_channel_id}",
                 code="CHANNEL_MISMATCH",
                 action="Проверьте expected_channel_id в конфиге",
                 retryable=False,
             )
+
+    def _verify_expected_channel(self) -> None:
+        """Разово проверить, что токен принадлежит ожидаемому каналу.
+
+        Вызывается перед первой реальной мутацией. Раньше _guard_channel жил
+        только внутри get_my_channel(), поэтому ни один write-метод канал не
+        проверял, и exit-код CHANNEL_MISMATCH (71) был недостижим для записей.
+        """
+        if self._channel_verified:
+            return
+        self.get_my_channel(dry_run=False)  # внутри вызывает _guard_channel
+        self._channel_verified = True
 
     def _require_yes(self, yes: bool, dry_run: bool, action: str) -> None:
         if not yes and not dry_run:
@@ -71,6 +91,12 @@ class YoutubeService:
                 code="CONFIRM_REQUIRED",
                 action="Передайте --yes",
             )
+
+    def _require_write(self, yes: bool, dry_run: bool, action: str) -> None:
+        """Гард для любого write-метода: подтверждение + проверка канала."""
+        self._require_yes(yes, dry_run, action)
+        if not dry_run:
+            self._verify_expected_channel()
 
     def get_my_channel(self, *, dry_run: bool = False) -> ChannelResource | dict[str, Any]:
         self.quota.check(COST["channels.list"])
@@ -268,7 +294,7 @@ class YoutubeService:
         dry_run: bool = False,
         yes: bool = False,
     ) -> VideoResource | dict[str, Any]:
-        self._require_yes(yes, dry_run, "изменения видео")
+        self._require_write(yes, dry_run, "изменения видео")
         self.quota.check(COST["videos.update"])
         body: dict[str, Any] = {"id": video_id}
         parts: list[str] = []
@@ -312,7 +338,7 @@ class YoutubeService:
     def delete_video(
         self, video_id: str, *, dry_run: bool = False, yes: bool = False
     ) -> dict[str, Any]:
-        self._require_yes(yes, dry_run, "удаления видео")
+        self._require_write(yes, dry_run, "удаления видео")
         self.quota.check(COST["videos.delete"])
         data = self.client.delete("videos", params={"id": video_id}, dry_run=dry_run)
         if dry_run:
@@ -341,7 +367,7 @@ class YoutubeService:
         dry_run: bool = False,
         yes: bool = False,
     ) -> PlaylistResource | dict[str, Any]:
-        self._require_yes(yes, dry_run, "создания плейлиста")
+        self._require_write(yes, dry_run, "создания плейлиста")
         self.quota.check(COST["playlists.insert"])
         body = {
             "snippet": {"title": title, "description": description},
@@ -361,7 +387,7 @@ class YoutubeService:
     def delete_playlist(
         self, playlist_id: str, *, dry_run: bool = False, yes: bool = False
     ) -> dict[str, Any]:
-        self._require_yes(yes, dry_run, "удаления плейлиста")
+        self._require_write(yes, dry_run, "удаления плейлиста")
         self.quota.check(COST["playlists.delete"])
         data = self.client.delete("playlists", params={"id": playlist_id}, dry_run=dry_run)
         if dry_run:
@@ -377,7 +403,7 @@ class YoutubeService:
         dry_run: bool = False,
         yes: bool = False,
     ) -> dict[str, Any]:
-        self._require_yes(yes, dry_run, "добавления в плейлист")
+        self._require_write(yes, dry_run, "добавления в плейлист")
         self.quota.check(COST["playlistItems.insert"])
         body = {
             "snippet": {
@@ -418,7 +444,7 @@ class YoutubeService:
     def reply_to_comment(
         self, parent_id: str, text: str, *, dry_run: bool = False, yes: bool = False
     ) -> dict[str, Any]:
-        self._require_yes(yes, dry_run, "ответа на комментарий")
+        self._require_write(yes, dry_run, "ответа на комментарий")
         self.quota.check(COST["comments.insert"])
         body = {"snippet": {"parentId": parent_id, "textOriginal": text}}
         data = self.client.post(
@@ -441,7 +467,7 @@ class YoutubeService:
         yes: bool = False,
     ) -> dict[str, Any]:
         """moderation_status: heldForReview | published | rejected."""
-        self._require_yes(yes, dry_run, "модерации комментария")
+        self._require_write(yes, dry_run, "модерации комментария")
         self.quota.check(COST["comments.setModerationStatus"])
         data = self.client.post(
             "comments/setModerationStatus",
@@ -481,7 +507,7 @@ class YoutubeService:
         yes: bool = False,
     ) -> dict[str, Any]:
         """Upload caption track (SBV/SRT/VTT etc.) via resumable-like binary POST."""
-        self._require_yes(yes, dry_run, "загрузки субтитров")
+        self._require_write(yes, dry_run, "загрузки субтитров")
         path = Path(file_path)
         if not path.is_file():
             raise ClientError(f"Файл не найден: {path}", code="NOT_FOUND")
@@ -537,7 +563,10 @@ class YoutubeService:
             raise ClientError(f"Файл не найден: {path}", code="NOT_FOUND")
         if dry_run:
             return {"dry_run": True, "video_id": video_id, "file": str(path)}
+        # Токен проверяется ДО обращения к API за проверкой канала:
+        # иначе пустой токен даёт невнятный AUTH_REQUIRED вместо NOT_AUTHENTICATED.
         require_access_token(access_token)
+        self._verify_expected_channel()
         self.quota.check(COST["thumbnails.set"])
         url = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
         headers = {"Authorization": f"Bearer {access_token}"}

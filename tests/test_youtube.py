@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from aiyoutubehands.client import HttpClient
+from aiyoutubehands.models.youtube import VideoSnippet
 from aiyoutubehands.quota import QuotaEngine
 from aiyoutubehands.youtube import YoutubeService, COST
 
@@ -131,4 +132,87 @@ def test_set_thumbnail_requires_token(tmp_path: Path, monkeypatch) -> None:
         yt.set_thumbnail("vid1", image, access_token="", dry_run=False, yes=True)
 
     assert ei.value.code == "NOT_AUTHENTICATED"
+    assert calls == []
+
+
+class _Resp:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+        self.status_code = 200
+        self.text = ""
+        self.headers: dict = {}
+        self.content = b"{}"
+
+    def json(self) -> dict:
+        return self._payload
+
+
+def _patch_http(monkeypatch, payload: dict) -> list[str]:
+    """Подменить httpx.Client так, чтобы channels.list вернул payload."""
+    import aiyoutubehands.client as client_mod
+
+    calls: list[str] = []
+
+    class _FakeHTTP:
+        def __init__(self, *a, **k): ...
+
+        def request(self, method, url, **kwargs):
+            calls.append(f"{method} {url}")
+            return _Resp(payload)
+
+        def close(self): ...
+
+    monkeypatch.setattr(client_mod.httpx, "Client", _FakeHTTP)
+    return calls
+
+
+def test_write_refuses_on_channel_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """Мутация не должна выполняться, если токен принадлежит другому каналу.
+
+    Регресс: _guard_channel вызывался только в get_my_channel(), поэтому ни один
+    write-метод канал не проверял. Аккаунт с несколькими каналами мог записать
+    метаданные не туда, а exit-код CHANNEL_MISMATCH (71) был недостижим.
+    """
+    from aiyoutubehands.client import ClientError
+
+    _patch_http(monkeypatch, {"items": [{"id": "UC_OTHER", "snippet": {"title": "Другой"}}]})
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_EXPECTED")
+
+    with pytest.raises(ClientError) as ei:
+        yt.update_video("v", snippet=VideoSnippet(title="t"), dry_run=False, yes=True)
+
+    assert ei.value.code == "CHANNEL_MISMATCH"
+
+
+def test_write_refuses_without_expected_channel_id(tmp_path: Path, monkeypatch) -> None:
+    """Пустой expected_channel_id — это отказ, а не «проверка не нужна».
+
+    Регресс: _guard_channel молча пропускал проверку при пустом ожидаемом
+    значении (fail-open).
+    """
+    from aiyoutubehands.client import ClientError
+
+    _patch_http(monkeypatch, {"items": [{"id": "UC_ANY", "snippet": {"title": "Любой"}}]})
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="")
+
+    with pytest.raises(ClientError) as ei:
+        yt.update_video("v", snippet=VideoSnippet(title="t"), dry_run=False, yes=True)
+
+    assert ei.value.code == "CHANNEL_NOT_CONFIGURED"
+
+
+def test_write_dry_run_makes_no_network_calls(tmp_path: Path, monkeypatch) -> None:
+    """dry-run не должен ходить в сеть, в том числе за проверкой канала."""
+    calls = _patch_http(monkeypatch, {"items": [{"id": "UC_OTHER", "snippet": {}}]})
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_EXPECTED")
+
+    result = yt.update_video("v", snippet=VideoSnippet(title="t"), dry_run=True)
+
+    assert result["dry_run"] is True
     assert calls == []
