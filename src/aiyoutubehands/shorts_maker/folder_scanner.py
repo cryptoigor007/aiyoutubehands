@@ -55,8 +55,15 @@ def _extract_prefix_number(name: str) -> str | None:
 
 
 def _find_first(folder: Path, patterns: list[str]) -> Path | None:
+    """Первый подходящий файл, игнорируя спутники AppleDouble.
+
+    На exFAT и сетевых дисках macOS кладёт рядом с каждым файлом служебный
+    ``._имя``. Он сортируется раньше настоящего (``.`` < буква), поэтому без
+    фильтра в план попадал ресурсный форк: бинарный мусор в описании и тегах
+    и 4-килобайтная заглушка вместо обложки.
+    """
     for pat in patterns:
-        matches = sorted(folder.glob(pat))
+        matches = sorted(p for p in folder.glob(pat) if not p.name.startswith("._"))
         if matches:
             return matches[0]
     return None
