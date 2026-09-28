@@ -216,3 +216,61 @@ def test_write_dry_run_makes_no_network_calls(tmp_path: Path, monkeypatch) -> No
 
     assert result["dry_run"] is True
     assert calls == []
+
+
+def test_list_playlists_follows_pagination(tmp_path: Path, monkeypatch) -> None:
+    """Канал с >50 плейлистами не должен молча обрезаться.
+
+    Регресс: list_playlists делал один запрос с maxResults=50 и не читал
+    nextPageToken, поэтому сигнал «уже оформлено» терялся на больших каналах,
+    и уже оформленные видео попадали в план повторно.
+    """
+    import aiyoutubehands.client as client_mod
+
+    pages = [
+        {
+            "items": [
+                {"id": "PL1", "snippet": {"title": "A"}, "contentDetails": {"itemCount": "1"}}
+            ],
+            "nextPageToken": "T2",
+        },
+        {
+            "items": [
+                {"id": "PL2", "snippet": {"title": "B"}, "contentDetails": {"itemCount": "2"}}
+            ]
+        },
+    ]
+    seen_params: list[dict] = []
+
+    class _Page:
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+            self.status_code = 200
+            self.text = ""
+            self.headers: dict = {}
+            self.content = b"{}"
+
+        def json(self) -> dict:
+            return self._payload
+
+    class _FakeHTTP:
+        def __init__(self, *a, **k): ...
+
+        def request(self, method, url, **kwargs):
+            params = dict(kwargs.get("params") or {})
+            seen_params.append(params)
+            return _Page(pages[1] if params.get("pageToken") == "T2" else pages[0])
+
+        def close(self): ...
+
+    monkeypatch.setattr(client_mod.httpx, "Client", _FakeHTTP)
+
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_test")
+
+    playlists = yt.list_playlists(dry_run=False)
+
+    assert [p.id for p in playlists] == ["PL1", "PL2"]
+    assert len(seen_params) == 2
+    assert seen_params[1]["pageToken"] == "T2"

@@ -348,15 +348,33 @@ class YoutubeService:
 
     def list_playlists(self, *, dry_run: bool = False) -> list[PlaylistResource] | dict[str, Any]:
         self.quota.check(COST["playlists.list"])
-        data = self.client.get(
-            "playlists",
-            params={"part": "snippet,contentDetails", "mine": "true", "maxResults": 50},
-            dry_run=dry_run,
-        )
         if dry_run:
-            return data
-        self.quota.consume("playlists.list", COST["playlists.list"])
-        return [PlaylistResource.from_api(i) for i in (data.get("items") or [])]
+            return self.client.get(
+                "playlists",
+                params={
+                    "part": "snippet,contentDetails",
+                    "mine": "true",
+                    "maxResults": 50,
+                },
+                dry_run=True,
+            )
+        out: list[PlaylistResource] = []
+        page_token: str | None = None
+        while True:
+            params: dict[str, Any] = {
+                "part": "snippet,contentDetails",
+                "mine": "true",
+                "maxResults": 50,
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            data = self.client.get("playlists", params=params, dry_run=False)
+            self.quota.consume("playlists.list", COST["playlists.list"])
+            out.extend(PlaylistResource.from_api(i) for i in (data.get("items") or []))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+        return out
 
     def create_playlist(
         self,
