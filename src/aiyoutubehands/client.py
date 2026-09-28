@@ -154,7 +154,7 @@ class HttpClient:
         self.recovery_timeout = recovery_timeout
         self._failures = 0
         self._opened_at: float | None = None
-        self._client = httpx.Client(timeout=timeout)
+        self._client = httpx.Client(timeout=timeout, trust_env=False)
 
     @property
     def circuit_closed(self) -> bool:

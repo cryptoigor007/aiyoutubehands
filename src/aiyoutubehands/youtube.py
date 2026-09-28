@@ -588,7 +588,7 @@ class YoutubeService:
         self.quota.check(COST["thumbnails.set"])
         url = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
         headers = {"Authorization": f"Bearer {access_token}"}
-        with httpx.Client(timeout=60.0) as http:
+        with httpx.Client(timeout=60.0, trust_env=False) as http:
             resp = http.post(
                 url,
                 params={"videoId": video_id},

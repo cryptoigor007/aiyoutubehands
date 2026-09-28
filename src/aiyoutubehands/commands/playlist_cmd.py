@@ -15,14 +15,13 @@ def register(cli: click.Group) -> None:
         """Плейлисты."""
 
     @playlist.command("list")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
-    def playlist_list(passphrase: str | None, dry_run: bool, as_json: bool) -> None:
+    def playlist_list(dry_run: bool, as_json: bool) -> None:
         if dry_run:
             click.echo(json.dumps({"dry_run": True}) if as_json else "playlist list: dry-run")
             return
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -46,21 +45,19 @@ def register(cli: click.Group) -> None:
     @click.argument("title")
     @click.option("--description", default="")
     @click.option("--privacy", default="private")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def playlist_create(
         title: str,
         description: str,
         privacy: str,
-        passphrase: str | None,
         yes: bool,
         dry_run: bool,
     ) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -73,20 +70,18 @@ def register(cli: click.Group) -> None:
     @playlist.command("add")
     @click.argument("playlist_id")
     @click.argument("video_id")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     def playlist_add(
         playlist_id: str,
         video_id: str,
-        passphrase: str | None,
         yes: bool,
         dry_run: bool,
     ) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)
@@ -98,14 +93,13 @@ def register(cli: click.Group) -> None:
 
     @playlist.command("delete")
     @click.argument("playlist_id")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
-    def playlist_delete(playlist_id: str, passphrase: str | None, yes: bool, dry_run: bool) -> None:
+    def playlist_delete(playlist_id: str, yes: bool, dry_run: bool) -> None:
         if dry_run or not yes:
             click.echo("dry-run / нужен --no-dry-run --yes")
             return
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)

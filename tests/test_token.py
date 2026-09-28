@@ -115,3 +115,65 @@ def test_encrypted_json_store_roundtrip_and_permissions(tmp_path: Path) -> None:
     assert path.stat().st_mode & 0o777 == 0o600
     loaded = EncryptedJsonStore(path, passphrase="secret-pass").load()
     assert loaded["client_id"] == "client-id"
+
+
+def test_private_dir_is_created_with_0700(tmp_path: Path) -> None:
+    """Каталог с секретами не должен быть доступен другим пользователям.
+
+    Регресс: mkdir(parents=True) без mode оставлял 0755 — секреты лежали
+    в каталоге, читаемом всей системой.
+    """
+    import stat as stat_mod
+
+    d = tmp_path / "aiyoutubehands"
+    p = d / "client_secrets.age"
+    EncryptedJsonStore(p, passphrase="pw").save({"client_id": "x"})
+
+    assert stat_mod.S_IMODE(d.stat().st_mode) == 0o700
+    assert stat_mod.S_IMODE(p.stat().st_mode) == 0o600
+
+
+def test_new_passphrase_files_use_strong_scrypt(tmp_path: Path) -> None:
+    """Новые файлы шифруются усиленным scrypt (N=2**17), а не 2**14."""
+    from aiyoutubehands.token import BLOB_MODE_PASSPHRASE_V2, unpack_blob
+
+    p = tmp_path / "s.age"
+    EncryptedJsonStore(p, passphrase="pw").save({"client_id": "x"})
+
+    mode, _salt, _payload = unpack_blob(p.read_bytes())
+    assert mode == BLOB_MODE_PASSPHRASE_V2
+
+
+def test_legacy_passphrase_files_still_load(tmp_path: Path) -> None:
+    """Файлы, созданные до усиления KDF (N=2**14), обязаны открываться.
+
+    Иначе усиление KDF сделало бы нечитаемыми уже существующие token.age и
+    client_secrets.age и потребовало бы повторной авторизации.
+    """
+    from aiyoutubehands.token import (
+        BLOB_MODE_PASSPHRASE,
+        derive_key_from_passphrase,
+        pack_blob,
+    )
+
+    p = tmp_path / "legacy.age"
+    key, salt = derive_key_from_passphrase("pw", None, n=2**14)
+    payload = encrypt_bytes(b'{"client_id": "legacy"}', key)
+    p.write_bytes(pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt))
+
+    assert EncryptedJsonStore(p, passphrase="pw").load()["client_id"] == "legacy"
+
+
+def test_legacy_token_store_still_loads(tmp_path: Path) -> None:
+    """TokenStore тоже читает старый формат, записывает новый."""
+    from aiyoutubehands.token import BLOB_MODE_PASSPHRASE, derive_key_from_passphrase, pack_blob
+
+    p = tmp_path / "legacy-token.age"
+    key, salt = derive_key_from_passphrase("pw", None, n=2**14)
+    payload = encrypt_bytes(
+        json.dumps({"access_token": "old-at", "refresh_token": "r", "expires_at": 9999999999}).encode(),
+        key,
+    )
+    p.write_bytes(pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt))
+
+    assert TokenStore(path=p, passphrase="pw").load().access_token == "old-at"

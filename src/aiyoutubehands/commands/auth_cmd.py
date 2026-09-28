@@ -47,9 +47,8 @@ def register(cli: click.Group) -> None:
         """Авторизация OAuth2 через системный браузер."""
 
     @auth.command("status")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--json", "as_json", is_flag=True)
-    def auth_status(passphrase: str | None, as_json: bool) -> None:
+    def auth_status(as_json: bool) -> None:
         """Статус токена."""
         path = _token_path()
         if not path.is_file():
@@ -58,7 +57,7 @@ def register(cli: click.Group) -> None:
                 json.dumps(data, ensure_ascii=False) if as_json else "auth: токен не настроен"
             )
             return
-        passphrase = _local_passphrase(passphrase)
+        passphrase = _local_passphrase(None)
         health = TokenStore(path=path, passphrase=passphrase).health()
         if as_json:
             click.echo(json.dumps(health, ensure_ascii=False, indent=2))
@@ -71,11 +70,9 @@ def register(cli: click.Group) -> None:
 
     @auth.command("login")
     @click.option("--stub", is_flag=True, help="Офлайн stub без Google")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True)
     def auth_login(
         stub: bool,
-        passphrase: str | None,
         yes: bool,
     ) -> None:
         """Browser-based OAuth login from an encrypted local OAuth vault."""
@@ -86,7 +83,7 @@ def register(cli: click.Group) -> None:
             load_client_secrets,
         )
 
-        passphrase = _local_passphrase(passphrase)
+        passphrase = _local_passphrase(None)
 
         path = _token_path()
         if path.is_file() and not yes:
@@ -118,9 +115,8 @@ def register(cli: click.Group) -> None:
     @click.option(
         "--source", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path)
     )
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True, help="Разрешить замену существующего хранилища")
-    def import_client_secrets(source: Path, passphrase: str | None, yes: bool) -> None:
+    def import_client_secrets(source: Path, yes: bool) -> None:
         """Encrypt a downloaded Google OAuth client JSON into the local vault."""
         from aiyoutubehands.auth_flow import read_client_secrets_json
 
@@ -130,7 +126,7 @@ def register(cli: click.Group) -> None:
                 f"Зашифрованный OAuth-клиент уже есть: {path}. Передайте --yes для перезаписи"
             )
             sys.exit(2)
-        passphrase = _local_passphrase(passphrase, confirm=True)
+        passphrase = _local_passphrase(None, confirm=True)
         secrets = read_client_secrets_json(source)
         EncryptedJsonStore(path, passphrase=passphrase).save(secrets)
         click.echo(f"OAuth-клиент зашифрован: {path}")

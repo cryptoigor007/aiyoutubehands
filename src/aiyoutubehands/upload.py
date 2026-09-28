@@ -140,7 +140,7 @@ def execute_resumable_upload(
         "notifySubscribers": "true" if plan.notify_subscribers else "false",
     }
 
-    with httpx.Client(timeout=120.0) as client:
+    with httpx.Client(timeout=120.0, trust_env=False) as client:
         init = client.post(UPLOAD_URL, params=params, headers=headers, json=metadata)
         if init.status_code not in (200, 201):
             raise UploadError(

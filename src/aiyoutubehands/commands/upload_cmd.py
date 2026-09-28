@@ -68,7 +68,6 @@ def register(cli: click.Group) -> None:
         default=True,
         help="Уведомлять подписчиков при публикации",
     )
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True, help="Реальная загрузка")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
@@ -78,7 +77,6 @@ def register(cli: click.Group) -> None:
         description: str,
         privacy: str,
         notify_subscribers: bool,
-        passphrase: str | None,
         yes: bool,
         dry_run: bool,
         as_json: bool,
@@ -108,7 +106,7 @@ def register(cli: click.Group) -> None:
                 click.echo(result.get("message", "dry-run"))
             return
 
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
 
         from aiyoutubehands.service_factory import build_youtube_service
 

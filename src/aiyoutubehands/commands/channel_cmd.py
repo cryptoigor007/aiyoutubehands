@@ -15,15 +15,14 @@ def register(cli: click.Group) -> None:
         """Канал."""
 
     @channel.command("info")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--json", "as_json", is_flag=True)
-    def channel_info(passphrase: str | None, dry_run: bool, as_json: bool) -> None:
+    def channel_info(dry_run: bool, as_json: bool) -> None:
         if dry_run:
-            data = {"dry_run": True, "message": "Нужен --no-dry-run + --passphrase"}
+            data = {"dry_run": True, "message": "Нужен --no-dry-run"}
             click.echo(json.dumps(data, ensure_ascii=False) if as_json else "channel info: dry-run")
             return
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         from aiyoutubehands.service_factory import build_youtube_service
 
         yt, client = build_youtube_service(passphrase=passphrase)

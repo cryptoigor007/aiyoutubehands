@@ -25,8 +25,34 @@ log = get_logger(__name__)
 
 BLOB_MAGIC = b"AYH1"
 BLOB_MODE_RAW = 0
-BLOB_MODE_PASSPHRASE = 1
+BLOB_MODE_PASSPHRASE = 1  # legacy: scrypt N=2**14
+BLOB_MODE_PASSPHRASE_V2 = 2  # scrypt N=2**17
 SALT_LEN = 16
+
+# OWASP: scrypt N=2**17, r=8, p=1 для паролей.
+SCRYPT_N = 2**17
+SCRYPT_N_LEGACY = 2**14
+
+
+def _ensure_private_dir(path: Path) -> None:
+    """Создать каталог для секретов с правами 0700 (не 0755 по умолчанию)."""
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+
+def _write_private(path: Path, blob: bytes) -> None:
+    """Атомарно записать файл, создавая его сразу с правами 0600.
+
+    Раньше файл создавался с обычными правами и только потом сужался через
+    chmod — между записью и chmod секрет был доступен на чтение.
+    """
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, blob)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
 
 
 class TokenError(Exception):
@@ -102,13 +128,20 @@ def decrypt_bytes(blob: bytes, key: bytes) -> bytes:
         ) from exc
 
 
-def derive_key_from_passphrase(passphrase: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
-    """Derive 32-byte key via scrypt. Returns (key, salt)."""
+def derive_key_from_passphrase(
+    passphrase: str, salt: bytes | None = None, *, n: int = SCRYPT_N
+) -> tuple[bytes, bytes]:
+    """Derive 32-byte key via scrypt. Returns (key, salt).
+
+    ``n`` выбирается вызывающим: новые файлы — SCRYPT_N (2**17), старые
+    блобы (mode 1) читаются с SCRYPT_N_LEGACY (2**14), иначе уже существующие
+    token.age / client_secrets.age стали бы нечитаемыми.
+    """
     if salt is None:
         salt = os.urandom(SALT_LEN)
     if len(salt) != SALT_LEN:
         raise TokenError("Неверная длина salt", code="TOKEN_BAD_SALT")
-    kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1)
+    kdf = Scrypt(salt=salt, length=32, n=n, r=8, p=1)
     key = kdf.derive(passphrase.encode("utf-8"))
     return key, salt
 
@@ -117,7 +150,7 @@ def pack_blob(payload: bytes, *, mode: int, salt: bytes | None = None) -> bytes:
     """Pack versioned on-disk blob."""
     if mode == BLOB_MODE_RAW:
         return BLOB_MAGIC + bytes([mode]) + payload
-    if mode == BLOB_MODE_PASSPHRASE:
+    if mode in (BLOB_MODE_PASSPHRASE, BLOB_MODE_PASSPHRASE_V2):
         if salt is None or len(salt) != SALT_LEN:
             raise TokenError("Для passphrase-режима нужен salt", code="TOKEN_BAD_SALT")
         return BLOB_MAGIC + bytes([mode]) + salt + payload
@@ -134,13 +167,17 @@ def unpack_blob(blob: bytes) -> tuple[int, bytes | None, bytes]:
         rest = blob[5:]
         if mode == BLOB_MODE_RAW:
             return mode, None, rest
-        if mode == BLOB_MODE_PASSPHRASE:
+        if mode in (BLOB_MODE_PASSPHRASE, BLOB_MODE_PASSPHRASE_V2):
             if len(rest) < SALT_LEN + 13:
                 raise TokenError("Повреждённый токен", code="TOKEN_CORRUPT")
             return mode, rest[:SALT_LEN], rest[SALT_LEN:]
         raise TokenError(f"Неизвестный mode={mode}", code="TOKEN_BAD_MODE")
     # legacy: pure nonce+ct
     return BLOB_MODE_RAW, None, blob
+
+
+def _scrypt_n_for_mode(mode: int) -> int:
+    return SCRYPT_N if mode == BLOB_MODE_PASSPHRASE_V2 else SCRYPT_N_LEGACY
 
 
 class TokenStore:
@@ -167,9 +204,11 @@ class TokenStore:
         self._passphrase = passphrase
         self.audit_path = Path(audit_path) if audit_path else self.path.with_suffix(".audit.jsonl")
 
-    def _resolve_key(self, salt: bytes | None = None) -> tuple[bytes, bytes | None]:
+    def _resolve_key(
+        self, salt: bytes | None = None, *, n: int = SCRYPT_N
+    ) -> tuple[bytes, bytes | None]:
         if self._passphrase is not None:
-            key, used_salt = derive_key_from_passphrase(self._passphrase, salt)
+            key, used_salt = derive_key_from_passphrase(self._passphrase, salt, n=n)
             return key, used_salt
         if self._key is None:
             raise TokenError(
@@ -180,21 +219,17 @@ class TokenStore:
         return self._key, None
 
     def save(self, data: TokenData) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(self.path.parent)
         raw = json.dumps(data.to_dict(), ensure_ascii=False).encode("utf-8")
         if self._passphrase is not None:
-            key, salt = self._resolve_key(salt=None)
+            key, salt = self._resolve_key(salt=None, n=SCRYPT_N)
             payload = encrypt_bytes(raw, key)
-            blob = pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt)
+            blob = pack_blob(payload, mode=BLOB_MODE_PASSPHRASE_V2, salt=salt)
         else:
             key, _ = self._resolve_key()
             payload = encrypt_bytes(raw, key)
             blob = pack_blob(payload, mode=BLOB_MODE_RAW)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_bytes(blob)
-        tmp.chmod(0o600)
-        tmp.replace(self.path)
-        self.path.chmod(0o600)
+        _write_private(self.path, blob)
         self.audit("save", detail=f"expires_at={data.expires_at}")
         log.info("token_saved", path=str(self.path))
 
@@ -207,14 +242,16 @@ class TokenStore:
             )
         blob = self.path.read_bytes()
         mode, salt, payload = unpack_blob(blob)
-        if mode == BLOB_MODE_PASSPHRASE:
+        if mode in (BLOB_MODE_PASSPHRASE, BLOB_MODE_PASSPHRASE_V2):
             if self._passphrase is None:
                 raise TokenError(
                     "Токен защищён passphrase, ключ не подходит",
                     code="TOKEN_BAD_KEY",
                     action="Передайте тот же passphrase",
                 )
-            key, _ = derive_key_from_passphrase(self._passphrase, salt)
+            key, _ = derive_key_from_passphrase(
+                self._passphrase, salt, n=_scrypt_n_for_mode(mode)
+            )
         else:
             if self._key is None:
                 # allow passphrase store to open raw only if key derived wrongly — reject
@@ -283,15 +320,13 @@ class EncryptedJsonStore:
         self._passphrase = passphrase
 
     def save(self, data: dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(self.path.parent)
         raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        key, salt = derive_key_from_passphrase(self._passphrase)
+        key, salt = derive_key_from_passphrase(self._passphrase, n=SCRYPT_N)
         payload = encrypt_bytes(raw, key)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_bytes(pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt))
-        tmp.chmod(0o600)
-        tmp.replace(self.path)
-        self.path.chmod(0o600)
+        _write_private(
+            self.path, pack_blob(payload, mode=BLOB_MODE_PASSPHRASE_V2, salt=salt)
+        )
 
     def load(self) -> dict[str, Any]:
         if not self.path.is_file():
@@ -301,12 +336,14 @@ class EncryptedJsonStore:
                 action="Импортируйте JSON: ayh auth import-client-secrets --source <файл>",
             )
         mode, salt, payload = unpack_blob(self.path.read_bytes())
-        if mode != BLOB_MODE_PASSPHRASE or salt is None:
+        if mode not in (BLOB_MODE_PASSPHRASE, BLOB_MODE_PASSPHRASE_V2) or salt is None:
             raise TokenError(
                 "Файл OAuth-клиента должен быть зашифрован паролем",
                 code="CLIENT_SECRETS_UNENCRYPTED",
             )
-        key, _ = derive_key_from_passphrase(self._passphrase, salt)
+        key, _ = derive_key_from_passphrase(
+            self._passphrase, salt, n=_scrypt_n_for_mode(mode)
+        )
         raw = decrypt_bytes(payload, key)
         try:
             data = json.loads(raw.decode("utf-8"))

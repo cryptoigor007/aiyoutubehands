@@ -31,10 +31,14 @@ def test_doctor_json() -> None:
 
 
 def test_version() -> None:
+    from aiyoutubehands import __version__
+
     runner = CliRunner()
     r = runner.invoke(cli, ["version"])
     assert r.exit_code == 0
-    assert "0.2.0" in r.output
+    # Сверяем с фактической версией, а не с зашитой строкой: иначе тест ломается
+    # при каждом бампе версии и ничего не проверяет.
+    assert __version__ in r.output
 
 
 def test_calendar_list_empty(tmp_path) -> None:
@@ -62,10 +66,37 @@ def test_auth_login_stub(tmp_path, monkeypatch) -> None:
     runner = CliRunner()
     r = runner.invoke(
         cli,
-        ["auth", "login", "--stub", "--passphrase", "test", "--yes"],
+        ["auth", "login", "--stub", "--yes"],
+        input="test\n",
     )
     assert r.exit_code == 0, r.output
     assert "OK" in r.output or "сохранён" in r.output or "код" in r.output.lower()
+
+
+def test_passphrase_is_not_accepted_as_flag() -> None:
+    """Мастер-ключ не должен передаваться аргументом.
+
+    Аргументы видны в истории shell и в `ps auxww`, а этот CLI рассчитан в том
+    числе на запуск агентом, который пойдёт по документированному флагу.
+    Пароль читается только интерактивно.
+    """
+    import click
+
+    def leaves(group, path):
+        for name, cmd in group.commands.items():
+            if isinstance(cmd, click.Group):
+                yield from leaves(cmd, path + [name])
+            else:
+                yield path + [name]
+
+    runner = CliRunner()
+    offenders = []
+    for path in leaves(cli, []):
+        out = runner.invoke(cli, path + ["--help"]).output
+        if "--passphrase" in out:
+            offenders.append(" ".join(path))
+
+    assert offenders == []
 
 
 def test_upload_prepare(tmp_path) -> None:

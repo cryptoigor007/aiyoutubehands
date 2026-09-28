@@ -108,3 +108,27 @@ def test_request_without_token_fails_fast(monkeypatch) -> None:
 
     assert ei.value.code == "NOT_AUTHENTICATED"
     assert calls == []
+
+
+def test_http_client_ignores_proxy_env(monkeypatch) -> None:
+    """Запросы с токеном не должны уходить через прокси из окружения.
+
+    httpx по умолчанию читает HTTP_PROXY/SSL_CERT_FILE и т.п. Для клиента,
+    носящего OAuth-токен, это лишний канал утечки.
+    """
+    import aiyoutubehands.client as client_mod
+
+    captured: list[dict] = []
+
+    class _FakeHTTP:
+        def __init__(self, *a, **k):
+            captured.append(k)
+
+        def close(self): ...
+
+    monkeypatch.setattr(client_mod.httpx, "Client", _FakeHTTP)
+
+    HttpClient(base_url="https://example.invalid", access_token="x")
+
+    assert captured
+    assert captured[0].get("trust_env") is False

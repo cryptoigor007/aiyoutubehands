@@ -82,7 +82,6 @@ def register(cli: click.Group) -> None:
         help="Корневая папка Shorts Maker",
     )
     @click.option("--days", default=14, show_default=True, help="Горизонт видео на канале")
-    @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории")
     @click.option(
         "--dry-run/--no-dry-run",
         default=False,
@@ -104,7 +103,6 @@ def register(cli: click.Group) -> None:
     def process_analyze(
         root_path: Path | None,
         days: int,
-        passphrase: str | None,
         dry_run: bool,
         as_json: bool,
         save_plan: Path | None,
@@ -118,7 +116,7 @@ def register(cli: click.Group) -> None:
             if not root_path.is_dir():
                 raise click.ClickException(f"Папка не найдена: {root_path}")
 
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
 
         from aiyoutubehands.service_factory import build_youtube_service
         from aiyoutubehands.shorts_maker.folder_scanner import scan_root
@@ -202,7 +200,6 @@ def register(cli: click.Group) -> None:
         help="Корневая папка Shorts Maker (та же, что при analyze)",
     )
     @click.option("--days", default=14, show_default=True)
-    @click.option("--passphrase", default=None)
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--playlist", default=None, help="ID плейлиста (опционально)")
@@ -218,7 +215,6 @@ def register(cli: click.Group) -> None:
         confirm: str,
         root_path: Path,
         days: int,
-        passphrase: str | None,
         yes: bool,
         dry_run: bool,
         playlist: str | None,
@@ -246,7 +242,7 @@ def register(cli: click.Group) -> None:
         if not yes and not dry_run:
             raise click.ClickException("Нужен --yes вместе с --no-dry-run")
 
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
             candidates = scan_root(root_path)
@@ -334,14 +330,12 @@ def register(cli: click.Group) -> None:
         default=None,
     )
     @click.option("--days", default=14, show_default=True)
-    @click.option("--passphrase", default=None)
     @click.option("--yes", is_flag=True)
     @click.option("--dry-run/--no-dry-run", default=True)
     @click.option("--allow-ai", is_flag=True)
     def process_run(
         root_path: Path | None,
         days: int,
-        passphrase: str | None,
         yes: bool,
         dry_run: bool,
         allow_ai: bool,
@@ -367,7 +361,7 @@ def register(cli: click.Group) -> None:
             show_default=True,
         )
 
-        passphrase = require_passphrase(passphrase)
+        passphrase = require_passphrase(None)
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
             candidates = scan_root(root_path)
