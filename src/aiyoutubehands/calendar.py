@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import calendar as calmod
+import contextlib
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiyoutubehands.logging import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 log = get_logger(__name__)
 
@@ -58,10 +62,16 @@ class Calendar:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextlib.contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Соединение закрывается вместе с блоком, а не сборщиком мусора."""
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init(self) -> None:
         with self._connect() as conn:
