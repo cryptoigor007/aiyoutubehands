@@ -105,20 +105,159 @@ class YoutubeService:
         return VideoResource.from_api(items[0])
 
     def list_videos(
-        self, *, ids: list[str] | None = None, dry_run: bool = False
+        self,
+        *,
+        ids: list[str] | None = None,
+        part: str = "snippet,status,contentDetails,processingDetails,statistics",
+        dry_run: bool = False,
     ) -> list[VideoResource] | dict[str, Any]:
         self.quota.check(COST["videos.list"])
         if not ids:
             raise ClientError("Нужны ids", code="BAD_REQUEST")
         data = self.client.get(
             "videos",
-            params={"part": "snippet,status", "id": ",".join(ids)},
+            params={"part": part, "id": ",".join(ids)},
             dry_run=dry_run,
         )
         if dry_run:
             return data
         self.quota.consume("videos.list", COST["videos.list"])
         return [VideoResource.from_api(i) for i in (data.get("items") or [])]
+
+    def list_channel_videos(
+        self,
+        *,
+        max_age_days: int = 14,
+        max_results: int = 200,
+        dry_run: bool = False,
+    ) -> list[VideoResource] | dict[str, Any]:
+        """List recent videos from the channel uploads playlist.
+
+        Uses playlistItems.list (1 unit/page) + batched videos.list (1 unit per 50 ids).
+        Filters by publishedAt within max_age_days when possible.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "method": "list_channel_videos",
+                "max_age_days": max_age_days,
+                "max_results": max_results,
+            }
+
+        channel = self.get_my_channel(dry_run=False)
+        if not isinstance(channel, ChannelResource):
+            raise ClientError("Не удалось получить канал", code="CHANNEL_NOT_FOUND")
+        uploads_id = (
+            (channel.raw.get("contentDetails") or {})
+            .get("relatedPlaylists", {})
+            .get("uploads")
+        )
+        if not uploads_id:
+            raise ClientError(
+                "uploads playlist не найден",
+                code="NOT_FOUND",
+                action="Проверьте права канала",
+            )
+
+        # Collect video IDs from uploads playlist
+        video_ids: list[str] = []
+        page_token: str | None = None
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+
+        while len(video_ids) < max_results:
+            self.quota.check(COST["playlistItems.list"])
+            params: dict[str, Any] = {
+                "part": "snippet,contentDetails",
+                "playlistId": uploads_id,
+                "maxResults": min(50, max_results - len(video_ids)),
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            data = self.client.get("playlistItems", params=params, dry_run=False)
+            self.quota.consume("playlistItems.list", COST["playlistItems.list"])
+            items = data.get("items") or []
+            if not items:
+                break
+            stop_early = False
+            for item in items:
+                sn = item.get("snippet") or {}
+                published = sn.get("publishedAt") or ""
+                if published:
+                    try:
+                        pub_dt = datetime.fromisoformat(
+                            published.replace("Z", "+00:00")
+                        )
+                        if pub_dt < cutoff:
+                            stop_early = True
+                            break
+                    except ValueError:
+                        pass
+                rid = (sn.get("resourceId") or {}).get("videoId")
+                if rid:
+                    video_ids.append(str(rid))
+            if stop_early:
+                break
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+
+        if not video_ids:
+            return []
+
+        # Batch videos.list (50 ids = 1 unit)
+        result: list[VideoResource] = []
+        batch_size = 50
+        for i in range(0, len(video_ids), batch_size):
+            batch = video_ids[i : i + batch_size]
+            batch_videos = self.list_videos(ids=batch, dry_run=False)
+            if isinstance(batch_videos, list):
+                result.extend(batch_videos)
+        return result
+
+    def list_video_ids_in_playlists(
+        self,
+        *,
+        max_playlists: int = 25,
+        dry_run: bool = False,
+    ) -> set[str] | dict[str, Any]:
+        """Return set of video IDs that appear in at least one of the user's playlists.
+
+        Used for the «already styled» playlist membership signal.
+        Quota: playlists.list (1) + playlistItems.list (1 per page per playlist).
+        """
+        if dry_run:
+            return {"dry_run": True, "method": "list_video_ids_in_playlists"}
+
+        playlists = self.list_playlists(dry_run=False)
+        if not isinstance(playlists, list):
+            return set()
+
+        in_any: set[str] = set()
+        for pl in playlists[:max_playlists]:
+            page_token: str | None = None
+            pages = 0
+            while pages < 5:  # safety: max 250 items per playlist
+                pages += 1
+                self.quota.check(COST["playlistItems.list"])
+                params: dict[str, Any] = {
+                    "part": "contentDetails",
+                    "playlistId": pl.id,
+                    "maxResults": 50,
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+                data = self.client.get("playlistItems", params=params, dry_run=False)
+                self.quota.consume("playlistItems.list", COST["playlistItems.list"])
+                for item in data.get("items") or []:
+                    vid = (item.get("contentDetails") or {}).get("videoId")
+                    if vid:
+                        in_any.add(str(vid))
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    break
+        return in_any
 
     def update_video(
         self,

@@ -5,6 +5,8 @@ from aiyoutubehands.models.youtube import (
     ChannelResource,
     CommentResource,
     PlaylistResource,
+    VideoContentDetails,
+    VideoProcessingDetails,
     VideoResource,
     VideoSnippet,
     VideoStatus,
@@ -13,6 +15,8 @@ from aiyoutubehands.models.youtube import (
 __all__ = [
     "VideoSnippet",
     "VideoStatus",
+    "VideoContentDetails",
+    "VideoProcessingDetails",
     "VideoResource",
     "ChannelResource",
     "PlaylistResource",

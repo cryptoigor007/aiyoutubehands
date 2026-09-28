@@ -64,10 +64,55 @@ class VideoStatus:
 
 
 @dataclass
+class VideoContentDetails:
+    duration: str = ""  # ISO 8601, e.g. PT45S
+    definition: str = ""
+    dimension: str = ""  # 2d / 3d
+    projection: str = ""
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> VideoContentDetails:
+        return cls(
+            duration=str(data.get("duration") or ""),
+            definition=str(data.get("definition") or ""),
+            dimension=str(data.get("dimension") or ""),
+            projection=str(data.get("projection") or ""),
+        )
+
+    def duration_seconds(self) -> int | None:
+        """Parse ISO 8601 duration (PT#H#M#S) to total seconds."""
+        if not self.duration or not self.duration.startswith("PT"):
+            return None
+        import re
+
+        m = re.fullmatch(
+            r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",
+            self.duration,
+        )
+        if not m:
+            return None
+        h, mi, s = (int(x) if x else 0 for x in m.groups())
+        return h * 3600 + mi * 60 + s
+
+
+@dataclass
+class VideoProcessingDetails:
+    processing_status: str = ""  # succeeded / processing / failed / terminated
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> VideoProcessingDetails:
+        return cls(processing_status=str(data.get("processingStatus") or ""))
+
+
+@dataclass
 class VideoResource:
     id: str = ""
     snippet: VideoSnippet = field(default_factory=VideoSnippet)
     status: VideoStatus = field(default_factory=VideoStatus)
+    content_details: VideoContentDetails = field(default_factory=VideoContentDetails)
+    processing_details: VideoProcessingDetails = field(
+        default_factory=VideoProcessingDetails
+    )
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -76,8 +121,47 @@ class VideoResource:
             id=str(data.get("id") or ""),
             snippet=VideoSnippet.from_api(data.get("snippet") or {}),
             status=VideoStatus.from_api(data.get("status") or {}),
+            content_details=VideoContentDetails.from_api(
+                data.get("contentDetails") or {}
+            ),
+            processing_details=VideoProcessingDetails.from_api(
+                data.get("processingDetails") or {}
+            ),
             raw=data,
         )
+
+    def has_custom_thumbnail(self) -> bool:
+        """True if non-default thumbnail is present (maxres or high with reasonable size)."""
+        thumbs = self.snippet.thumbnails or {}
+        for key in ("maxres", "standard", "high"):
+            t = thumbs.get(key)
+            if isinstance(t, dict) and t.get("url"):
+                # Default auto-generated often lack maxres; presence of maxres is strong signal
+                if key == "maxres":
+                    return True
+                w = int(t.get("width") or 0)
+                h = int(t.get("height") or 0)
+                if w >= 640 and h >= 360:
+                    return True
+        return False
+
+    def is_short(self) -> bool:
+        """Duration ≤ 60s (Shorts heuristic)."""
+        sec = self.content_details.duration_seconds()
+        return sec is not None and sec <= 60
+
+    def never_published(self) -> bool:
+        """Heuristic: schedule publishAt may still be allowed.
+
+        YouTube only allows status.publishAt when privacy is private and the
+        video has never been made public/unlisted. A non-empty snippet.publishedAt
+        usually means the platform already treated it as published — API then
+        returns invalidPublishAt. Fresh private inserts without publishedAt
+        return True; typical already-uploaded private videos return False.
+        """
+        if self.status.privacy_status != "private":
+            return False
+        return not bool(self.snippet.published_at)
 
 
 @dataclass

@@ -62,3 +62,22 @@ def test_schedule_and_playlist_dry_run(tmp_path: Path) -> None:
     assert r2["dry_run"] is True
     r3 = yt.moderate_comment("c1", "published", dry_run=True, yes=True)
     assert r3.get("dry_run") is True or "dry_run" in r3
+
+
+def test_list_channel_videos_dry_run(tmp_path: Path) -> None:
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_test")
+    result = yt.list_channel_videos(max_age_days=14, dry_run=True)
+    assert isinstance(result, dict)
+    assert result["dry_run"] is True
+    assert result["method"] == "list_channel_videos"
+
+
+def test_list_video_ids_in_playlists_dry_run(tmp_path: Path) -> None:
+    client = HttpClient(access_token="fake")
+    quota = QuotaEngine(db_path=tmp_path / "q.db")
+    yt = YoutubeService(client, quota, expected_channel_id="UC_test")
+    result = yt.list_video_ids_in_playlists(dry_run=True)
+    assert isinstance(result, dict)
+    assert result["dry_run"] is True

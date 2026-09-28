@@ -48,3 +48,61 @@ def test_comment_and_caption() -> None:
     assert c.author == "A"
     cap = CaptionResource.from_api({"id": "x", "snippet": {"videoId": "v", "language": "ru", "name": "RU"}})
     assert cap.language == "ru"
+
+
+def test_duration_seconds() -> None:
+    from aiyoutubehands.models.youtube import VideoContentDetails
+
+    assert VideoContentDetails(duration="PT45S").duration_seconds() == 45
+    assert VideoContentDetails(duration="PT1M30S").duration_seconds() == 90
+    assert VideoContentDetails(duration="PT1H2M3S").duration_seconds() == 3723
+    assert VideoContentDetails(duration="").duration_seconds() is None
+    assert VideoContentDetails(duration="P1D").duration_seconds() is None
+
+
+def test_video_is_short_and_never_published() -> None:
+    raw = {
+        "id": "s1",
+        "snippet": {"title": "Short", "publishedAt": ""},
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT58S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+    }
+    v = VideoResource.from_api(raw)
+    assert v.is_short() is True
+    assert v.never_published() is True
+    assert v.processing_details.processing_status == "succeeded"
+
+    raw2 = {
+        "id": "s2",
+        "snippet": {"title": "Long", "publishedAt": "2026-01-01T00:00:00Z"},
+        "status": {"privacyStatus": "public"},
+        "contentDetails": {"duration": "PT5M"},
+    }
+    v2 = VideoResource.from_api(raw2)
+    assert v2.is_short() is False
+    assert v2.never_published() is False
+
+
+def test_has_custom_thumbnail() -> None:
+    v = VideoResource.from_api({
+        "id": "t1",
+        "snippet": {
+            "title": "T",
+            "thumbnails": {
+                "maxres": {"url": "https://example.com/max.jpg", "width": 1280, "height": 720}
+            },
+        },
+    })
+    assert v.has_custom_thumbnail() is True
+
+    v2 = VideoResource.from_api({
+        "id": "t2",
+        "snippet": {
+            "title": "T",
+            "thumbnails": {
+                "default": {"url": "https://example.com/d.jpg", "width": 120, "height": 90}
+            },
+        },
+    })
+    assert v2.has_custom_thumbnail() is False

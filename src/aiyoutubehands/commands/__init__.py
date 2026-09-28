@@ -17,8 +17,10 @@ def register_all(cli: click.Group) -> None:
         connect_cmd,
         doctor_cmd,
         playlist_cmd,
+        process_cmd,
         quota_cmd,
         setup_cmd,
+        tray_cmd,
         upload_cmd,
         video_cmd,
     )
@@ -36,6 +38,8 @@ def register_all(cli: click.Group) -> None:
     captions_cmd.register(cli)
     playlist_cmd.register(cli)
     ai_cmd.register(cli)
+    process_cmd.register(cli)
+    tray_cmd.register(cli)
 
     @cli.command("version")
     @click.option("--json", "as_json", is_flag=True)

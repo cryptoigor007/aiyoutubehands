@@ -49,6 +49,7 @@ def register(cli: click.Group) -> None:
             "aiyoutubehands.youtube",
             "aiyoutubehands.ai",
             "aiyoutubehands.upload",
+            "aiyoutubehands.shorts_maker",
         )
         mod_status: dict[str, str] = {}
         for mod in modules:
@@ -59,6 +60,13 @@ def register(cli: click.Group) -> None:
                 mod_status[mod.split(".")[-1]] = f"error: {exc}"
                 result["ok"] = False
         result["checks"]["modules"] = mod_status
+
+        # Optional tools used by process (duration/vertical matching)
+        import shutil
+
+        result["checks"]["ffprobe"] = (
+            "ok" if shutil.which("ffprobe") else "missing (duration match degraded)"
+        )
 
         if as_json:
             click.echo(json.dumps(result, ensure_ascii=False, indent=2))

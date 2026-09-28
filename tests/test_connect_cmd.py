@@ -31,8 +31,14 @@ def test_connect_configures_and_removes_source(tmp_path: Path, monkeypatch) -> N
 
 
 def test_find_downloaded_oauth_file_uses_newest_matching_json(tmp_path: Path) -> None:
+    import os
+    import time
+
     older = tmp_path / "client_secret_old.json"
     newer = tmp_path / "client_secret_new.json"
     older.write_text("{}", encoding="utf-8")
+    # Ensure mtime ordering even on coarse FS timestamps
+    os.utime(older, (time.time() - 10, time.time() - 10))
     newer.write_text("{}", encoding="utf-8")
+    os.utime(newer, (time.time(), time.time()))
     assert _find_downloaded_oauth_file(tmp_path) == newer

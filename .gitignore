@@ -1,69 +1,24 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
 .venv/
 venv/
-ENV/
-env/
-
-# Type checkers / linters
+dist/
+build/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
 .coverage
 htmlcov/
-coverage.xml
-*.cover
+*.egg
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Secrets & local state (NEVER commit)
+# Local / secrets
+config/local.yaml
 *.age
-key.age
-*.key
-tokens/
-*.db
-*.sqlite
-*.sqlite3
-.cache/
-*.log
-
-# Project specific
-config/local.*
-config/*.local.yaml
 .env
-.env.*
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Docs build
-docs/_build/
-site/
+# Logs / state
+*.log
+ayh_run_*.log
