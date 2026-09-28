@@ -46,25 +46,27 @@ def _require_fingerprint_match(plan: object, expected: str) -> None:
 
 
 def register(cli: click.Group) -> None:
-    @cli.group()
+    @cli.group(invoke_without_command=True)
     @click.pass_context
     def process(ctx: click.Context) -> None:
         """Пост-обработка уже загруженных видео (Shorts Maker).
 
         Перед работой AI и оператор обязаны следовать docs/AGENT_PROMPT_PROCESS.md
         """
-        # Banner on every process subcommand invocation (not on bare --help of group only)
-        if ctx.invoked_subcommand is not None:
-            from aiyoutubehands.agent_rules import print_safety_banner
+        # Баннер на каждом вызове `ayh process …`, включая голый `process`.
+        # При `--help` click выходит раньше колбэка, поэтому там баннера нет.
+        from aiyoutubehands.agent_rules import print_safety_banner
 
-            print_safety_banner(echo=click.echo)
+        print_safety_banner(echo=click.echo)
+        if ctx.invoked_subcommand is None:
+            click.echo(ctx.get_help())
+            ctx.exit(2)
 
     @process.command("rules")
     def process_rules() -> None:
         """Показать путь и полный текст обязательных правил для AI/оператора."""
-        from aiyoutubehands.agent_rules import load_rules_text, print_safety_banner, rules_file_path
+        from aiyoutubehands.agent_rules import load_rules_text, rules_file_path
 
-        print_safety_banner(echo=click.echo)
         path = rules_file_path()
         text = load_rules_text()
         if path is None or text is None:
@@ -189,7 +191,7 @@ def register(cli: click.Group) -> None:
     @process.command("apply")
     @click.option(
         "--confirm",
-        required=True,
+        default=None,
         help="Точная фраза: «подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>»",
     )
     @click.option(
@@ -232,6 +234,30 @@ def register(cli: click.Group) -> None:
         from aiyoutubehands.shorts_maker.plan import build_plan, render_plan_table
         from aiyoutubehands.shorts_maker.processor import apply_plan
 
+        if dry_run:
+            # Предпросмотр полностью офлайн: план берём из файла, если он дан.
+            if plan_file is None:
+                raise click.ClickException(
+                    "apply --dry-run не запрашивает видео канала, поэтому плана нет.\n"
+                    "Показать план: ayh process analyze --path <PATH>\n"
+                    "Либо передайте сохранённый план: "
+                    "ayh process apply --path <PATH> --plan <файл> --dry-run"
+                )
+            saved = json.loads(plan_file.read_text(encoding="utf-8"))
+            click.echo(f"План из {plan_file} (dry-run, сеть не используется)")
+            click.echo(f"Хэш плана: {saved.get('fingerprint', '<нет>')}")
+            click.echo(f"Фраза подтверждения: {saved.get('confirm_phrase', '<нет>')}")
+            for item in saved.get("items") or []:
+                click.echo(
+                    f"  {item.get('video_id') or '—':<12} "
+                    f"{item.get('status', ''):<24} {item.get('new_title', '')}"
+                )
+            return
+
+        if not confirm:
+            raise click.ClickException(
+                "Нужен --confirm: «подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>»"
+            )
         expected_date = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
         phrase_date, phrase_fp = _parse_confirm(confirm)
         if phrase_date != expected_date:

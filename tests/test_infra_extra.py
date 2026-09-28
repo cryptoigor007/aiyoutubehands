@@ -172,17 +172,14 @@ def test_format_error_lines_retryable_and_action() -> None:
     assert "можно повторить: да" in lines
 
 
-def test_handle_cli_error_custom_stream(capsys: pytest.CaptureFixture[str]) -> None:
-    # ВНИМАНИЕ: handle_cli_error() принимает параметр err, но фактически пишет
-    # через click.echo(..., err=True) и игнорирует переданный поток (см. отчёт).
-    # Здесь проверяем только кодовую ветку "err is not None" и сам вывод в stderr.
+def test_handle_cli_error_custom_stream() -> None:
+    """Ошибка пишется в переданный поток, а не в stderr Click."""
     err = StringIO()
     code = handle_cli_error(RuntimeError("boom"), err=err)
     assert code == EXIT_GENERIC
-    assert err.getvalue() == ""
-    captured = capsys.readouterr().err
-    assert "APP_ERROR" in captured
-    assert "boom" in captured
+    written = err.getvalue()
+    assert "APP_ERROR" in written
+    assert "boom" in written
 
 
 def test_handle_cli_error_click_exit() -> None:
@@ -527,16 +524,6 @@ def test_package_version_fallback_on_package_not_found(
 # --------------------------------------------------------------------------- #
 # agent_rules.py
 # --------------------------------------------------------------------------- #
-
-
-def test_find_repo_root_via_alt_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aiyoutubehands.agent_rules as rulesmod
-
-    # Ломаем RULES_REL, чтобы candidate никогда не существовал, а alt — существовал.
-    monkeypatch.setattr(rulesmod, "RULES_REL", Path("no-such-dir") / "MISSING.md")
-    root = rulesmod.find_repo_root()
-    assert root is not None
-    assert (root / "docs" / "AGENT_PROMPT_PROCESS.md").is_file()
 
 
 def test_find_repo_root_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:

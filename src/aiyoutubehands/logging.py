@@ -57,7 +57,10 @@ class _FallbackLogger:
         self._emit("debug", event, kwargs)
 
     def _emit(self, level: str, event: str, kwargs: dict[str, Any]) -> None:
-        cid = correlation_id_var.get() or _new_correlation_id()
+        cid = correlation_id_var.get()
+        if not cid:
+            cid = _new_correlation_id()
+            correlation_id_var.set(cid)
         payload = {"event": event, "level": level, "correlation_id": cid, **kwargs}
         getattr(self._log, level)(json.dumps(payload, ensure_ascii=False))
 

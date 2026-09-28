@@ -466,7 +466,16 @@ def test_apply_confirm_without_hash_is_refused(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["process", "apply", "--path", str(root), "--confirm", "подтверждаю план от 01.01.2026"],
+        [
+            "process",
+            "apply",
+            "--path",
+            str(root),
+            "--confirm",
+            "подтверждаю план от 01.01.2026",
+            "--no-dry-run",
+            "--yes",
+        ],
     )
     assert result.exit_code != 0
     assert "Фраза должна быть" in result.output
@@ -490,6 +499,8 @@ def test_apply_confirm_wrong_date_is_refused(
             str(root),
             "--confirm",
             "подтверждаю план от 01.01.2020 #abc123abc123",
+            "--no-dry-run",
+            "--yes",
         ],
     )
     assert result.exit_code != 0
@@ -512,7 +523,7 @@ def test_apply_wrong_fingerprint_is_refused(
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["process", "apply", "--path", str(root), "--confirm", phrase],
+        ["process", "apply", "--path", str(root), "--confirm", phrase, "--no-dry-run", "--yes"],
         input="secret\n",
     )
     assert result.exit_code != 0
@@ -537,7 +548,7 @@ def test_apply_no_dry_run_without_yes_is_refused(
     assert "Нужен --yes" in result.output
 
 
-def test_apply_dry_run_with_valid_phrase_reports_nothing_to_do(
+def test_apply_dry_run_does_not_apply_anything(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path / "sm"
@@ -545,19 +556,15 @@ def test_apply_dry_run_with_valid_phrase_reports_nothing_to_do(
     _make_folder(root, "ш1 Alpha")
 
     yt = FakeYT(quota=QuotaEngine(db_path=tmp_path / "q.db"))
-    client = FakeClient()
-    _install_fake(monkeypatch, yt, client)
+    _install_fake(monkeypatch, yt, FakeClient())
 
-    # apply --dry-run never reads the channel, so the plan is always empty.
-    phrase = f"подтверждаю план от {_today_msk()} #{plan_fingerprint([])}"
+    # apply --dry-run не читает канал, поэтому вместо плана объясняет, как его
+    # посмотреть. Главное — ничего не применяет и не требует фразы.
     runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["process", "apply", "--path", str(root), "--confirm", phrase],
-        input="secret\n",
-    )
-    assert result.exit_code == 0, result.output
-    assert "Нет видео для обработки." in result.output
+    result = runner.invoke(cli, ["process", "apply", "--path", str(root)])
+
+    assert result.exit_code != 0
+    assert "analyze" in result.output
     assert not yt.calls, "dry-run не должен ничего применять"
 
 
@@ -587,6 +594,8 @@ def test_apply_plan_file_mismatch_is_refused(
             phrase,
             "--plan",
             str(plan_file),
+            "--no-dry-run",
+            "--yes",
         ],
         input="secret\n",
     )
@@ -621,6 +630,8 @@ def test_apply_plan_file_matching_is_accepted(
             phrase,
             "--plan",
             str(plan_file),
+            "--no-dry-run",
+            "--yes",
         ],
         input="secret\n",
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -29,14 +30,22 @@ def _secrets_path() -> Path:
 
 
 def _local_passphrase(passphrase: str | None, *, confirm: bool = False) -> str:
-    """Prompt locally so the passphrase never enters shell history or logs."""
+    """Prompt locally so the passphrase never enters shell history or logs.
+
+    AYH_PASSPHRASE — неинтерактивный путь для агентов и скриптов; приглашение
+    пишется в stderr, чтобы не ломать --json.
+    """
     if passphrase:
         return passphrase
+    env = os.environ.get("AYH_PASSPHRASE")
+    if env:
+        return env
     return str(
         click.prompt(
             "Пароль локального хранилища",
             hide_input=True,
             confirmation_prompt=confirm,
+            err=True,
         )
     )
 
@@ -83,12 +92,12 @@ def register(cli: click.Group) -> None:
             load_client_secrets,
         )
 
-        passphrase = _local_passphrase(None)
-
         path = _token_path()
         if path.is_file() and not yes:
             click.echo(f"Токен уже есть: {path}. Передайте --yes для перезаписи")
             sys.exit(2)
+
+        passphrase = _local_passphrase(None)
 
         if stub:
             dc = device_flow_start_stub("stub")

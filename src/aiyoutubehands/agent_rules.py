@@ -30,10 +30,6 @@ def find_repo_root() -> Path | None:
         candidate = parent / RULES_REL
         if candidate.is_file():
             return parent
-        # installed package: src/aiyoutubehands → parents may include site-packages
-        alt = parent / "docs" / "AGENT_PROMPT_PROCESS.md"
-        if alt.is_file():
-            return parent
     return None
 
 

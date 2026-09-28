@@ -64,11 +64,11 @@ def handle_cli_error(exc: BaseException, *, err: Any = None) -> int:
     if isinstance(exc, click.exceptions.Exit):
         return int(getattr(exc, "exit_code", 0))
     if isinstance(exc, click.Abort):
-        click.echo("отменено", err=True)
+        click.echo("отменено", file=err)
         return EXIT_GENERIC
     if isinstance(exc, click.ClickException):
-        exc.show()
+        exc.show(file=err)
         return EXIT_USAGE
     for line in format_error_lines(exc):
-        click.echo(line, err=True)
+        click.echo(line, file=err)
     return exit_code_for_exception(exc)

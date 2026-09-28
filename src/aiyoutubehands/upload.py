@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -116,15 +117,14 @@ def execute_resumable_upload(
             code="CONFIRM_REQUIRED",
             action="Передайте --yes",
         )
-    if quota is not None:
-        quota.check(COST_INSERT)
-
     if not access_token:
         raise UploadError(
             "Нет access_token — авторизация не выполнена",
             code="NOT_AUTHENTICATED",
             action="Выполните: ayh auth login",
         )
+    if quota is not None:
+        quota.check(COST_INSERT)
 
     metadata = {
         "snippet": plan.snippet.to_api(),
@@ -157,6 +157,9 @@ def execute_resumable_upload(
         sent = 0
         with plan.file_path.open("rb") as f:
             while sent < plan.size:
+                # Читаем ровно с той позиции, которую подтвердил сервер:
+                # после 308 с Range позиция может отличаться от прочитанной.
+                f.seek(sent)
                 chunk = f.read(chunk_size)
                 if not chunk:
                     break
@@ -170,7 +173,22 @@ def execute_resumable_upload(
                 }
                 put = client.put(session_url, headers=put_headers, content=chunk)
                 if put.status_code in (200, 201):
-                    data = put.json()
+                    # Сервер подтвердил приём. Если это меньше заявленного
+                    # размера — данные потеряны, а не «загружено успешно».
+                    if end + 1 != plan.size:
+                        raise UploadError(
+                            f"Сервер принял {end + 1} из {plan.size} байт",
+                            code="UPLOAD_INCOMPLETE",
+                            retryable=True,
+                        )
+                    try:
+                        data = put.json()
+                    except ValueError as exc:
+                        raise UploadError(
+                            "Ответ загрузки не является JSON",
+                            code="UPLOAD_BAD_RESPONSE",
+                            retryable=True,
+                        ) from exc
                     video_id = str(data.get("id") or "")
                     if quota is not None:
                         quota.consume("videos.insert", COST_INSERT)
@@ -183,7 +201,9 @@ def execute_resumable_upload(
                         "raw": data,
                     }
                 if put.status_code == 308:
-                    sent = end + 1
+                    # Сколько байт сервер реально принял, он сообщает в Range.
+                    m = re.fullmatch(r"bytes=(\d+)-(\d+)", (put.headers.get("Range") or "").strip())
+                    sent = int(m.group(2)) + 1 if m else end + 1
                     continue
                 raise UploadError(
                     f"Ошибка загрузки chunk: {put.status_code} {put.text[:300]}",

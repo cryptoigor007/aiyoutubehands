@@ -230,6 +230,8 @@ class YoutubeService:
 
         if not video_ids:
             return []
+        # Сервер может вернуть больше запрошенного — держим границу сами.
+        video_ids = video_ids[:max_results]
 
         # Batch videos.list (50 ids = 1 unit)
         result: list[VideoResource] = []
@@ -239,7 +241,8 @@ class YoutubeService:
             batch_videos = self.list_videos(ids=batch, dry_run=False)
             if isinstance(batch_videos, list):
                 result.extend(batch_videos)
-        return result
+        # Держим контракт «не больше max_results» и на выходе.
+        return result[:max_results]
 
     def list_video_ids_in_playlists(
         self,
