@@ -150,18 +150,31 @@ class VideoResource:
         sec = self.content_details.duration_seconds()
         return sec is not None and sec <= 60
 
-    def never_published(self) -> bool:
-        """Heuristic: schedule publishAt may still be allowed.
+    @property
+    def view_count(self) -> int:
+        """Просмотры из statistics (0, если их нет)."""
+        stats = (self.raw or {}).get("statistics") or {}
+        try:
+            return int(stats.get("viewCount") or 0)
+        except (TypeError, ValueError):
+            return 0
 
-        YouTube only allows status.publishAt when privacy is private and the
-        video has never been made public/unlisted. A non-empty snippet.publishedAt
-        usually means the platform already treated it as published — API then
-        returns invalidPublishAt. Fresh private inserts without publishedAt
-        return True; typical already-uploaded private videos return False.
+    def never_published(self) -> bool:
+        """Можно ли ставить status.publishAt.
+
+        YouTube выставляет ``snippet.publishedAt`` уже при загрузке, поэтому он
+        заполнен у ВСЕХ роликов и не означает «уже опубликован». Проверено на
+        канале 28.09.2026: у приватных роликов с заполненным publishedAt
+        расписание (publishAt) стоит и работает.
+
+        Планировать нельзя, если ролик не приватный, уже имеет publishAt или
+        набрал просмотры (значит, был открыт).
         """
         if self.status.privacy_status != "private":
             return False
-        return not bool(self.snippet.published_at)
+        if self.status.publish_at:
+            return False
+        return self.view_count == 0
 
 
 @dataclass
