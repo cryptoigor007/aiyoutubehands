@@ -84,3 +84,81 @@ def test_resumable_requires_token(tmp_path: Path, monkeypatch) -> None:
 
     assert ei.value.code == "NOT_AUTHENTICATED"
     assert calls == []
+
+
+def test_notify_subscribers_defaults_to_true(tmp_path: Path) -> None:
+    """По умолчанию поведение YouTube сохраняется — уведомление включено."""
+    f = tmp_path / "v.bin"
+    f.write_bytes(b"data")
+    plan = prepare_upload(f, title="T", dry_run=False)
+    assert plan.notify_subscribers is True
+
+
+def test_resumable_can_disable_subscriber_notification(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Публичную загрузку можно сделать без рассылки подписчикам.
+
+    Регресс: параметр notifySubscribers не передавался вообще, поэтому
+    публикация молча уведомляла всю базу подписчиков, и отключить это было нечем.
+    """
+    from aiyoutubehands import upload as upload_mod
+    from aiyoutubehands.upload import execute_resumable_upload
+
+    seen: list[dict] = []
+
+    class _FakeRespFail:
+        status_code = 400
+        text = "stop"
+        headers: dict = {}
+
+    class _FakeHTTP:
+        def __init__(self, *a, **k): ...
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, *, params=None, headers=None, json=None):
+            seen.append(dict(params or {}))
+            return _FakeRespFail()
+
+        def put(self, *a, **k):
+            return _FakeRespFail()
+
+    monkeypatch.setattr(upload_mod.httpx, "Client", _FakeHTTP)
+
+    f = tmp_path / "v.bin"
+    f.write_bytes(b"data")
+    plan = prepare_upload(
+        f, title="T", privacy="public", notify_subscribers=False, dry_run=False
+    )
+
+    with pytest.raises(UploadError):
+        execute_resumable_upload(plan, access_token="fake", yes=True)
+
+    assert seen, "должен быть хотя бы один запрос инициализации"
+    assert seen[0]["notifySubscribers"] == "false"
+
+
+def test_upload_prepare_cli_can_disable_notifications(tmp_path: Path) -> None:
+    """CLI даёт выключить рассылку подписчикам ещё на этапе плана."""
+    import json
+
+    from click.testing import CliRunner
+
+    from aiyoutubehands.main import cli
+
+    f = tmp_path / "v.mp4"
+    f.write_bytes(b"data")
+
+    result = CliRunner().invoke(
+        cli,
+        ["upload", "prepare", str(f), "--title", "T", "--no-notify-subscribers", "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["plan"]["notify_subscribers"] is False

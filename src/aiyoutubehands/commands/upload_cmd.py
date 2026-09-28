@@ -22,14 +22,30 @@ def register(cli: click.Group) -> None:
     @click.option(
         "--privacy", default="private", type=click.Choice(["private", "unlisted", "public"])
     )
+    @click.option(
+        "--notify-subscribers/--no-notify-subscribers",
+        default=True,
+        help="Уведомлять подписчиков при публикации",
+    )
     @click.option("--json", "as_json", is_flag=True)
     def upload_prepare(
-        file_path: str, title: str, description: str, privacy: str, as_json: bool
+        file_path: str,
+        title: str,
+        description: str,
+        privacy: str,
+        notify_subscribers: bool,
+        as_json: bool,
     ) -> None:
         """План загрузки без отправки."""
         from aiyoutubehands.upload import execute_upload_dry_run, prepare_upload
 
-        plan = prepare_upload(file_path, title=title, description=description, privacy=privacy)
+        plan = prepare_upload(
+            file_path,
+            title=title,
+            description=description,
+            privacy=privacy,
+            notify_subscribers=notify_subscribers,
+        )
         result = execute_upload_dry_run(plan)
         if as_json:
             click.echo(json.dumps(result, ensure_ascii=False, indent=2))
@@ -38,6 +54,7 @@ def register(cli: click.Group) -> None:
             click.echo(f"  файл: {plan.file_path} ({plan.size} байт)")
             click.echo(f"  title: {plan.snippet.title}")
             click.echo(f"  privacy: {plan.status.privacy_status}")
+            click.echo(f"  уведомлять подписчиков: {'да' if plan.notify_subscribers else 'нет'}")
 
     @upload.command("run")
     @click.argument("file_path", type=click.Path(exists=True))
@@ -45,6 +62,11 @@ def register(cli: click.Group) -> None:
     @click.option("--description", default="")
     @click.option(
         "--privacy", default="private", type=click.Choice(["private", "unlisted", "public"])
+    )
+    @click.option(
+        "--notify-subscribers/--no-notify-subscribers",
+        default=True,
+        help="Уведомлять подписчиков при публикации",
     )
     @click.option("--passphrase", default=None, help="Не рекомендуется: виден в истории команд")
     @click.option("--yes", is_flag=True, help="Реальная загрузка")
@@ -55,6 +77,7 @@ def register(cli: click.Group) -> None:
         title: str,
         description: str,
         privacy: str,
+        notify_subscribers: bool,
         passphrase: str | None,
         yes: bool,
         dry_run: bool,
@@ -73,6 +96,7 @@ def register(cli: click.Group) -> None:
             description=description,
             privacy=privacy,
             dry_run=dry_run,
+            notify_subscribers=notify_subscribers,
         )
         if dry_run or not yes:
             result = execute_upload_dry_run(plan)

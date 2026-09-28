@@ -43,6 +43,8 @@ class UploadPlan:
     snippet: VideoSnippet
     status: VideoStatus
     dry_run: bool = True
+    # youtube videos.insert notifySubscribers; по умолчанию YouTube = true
+    notify_subscribers: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,6 +54,7 @@ class UploadPlan:
             "title": self.snippet.title,
             "privacy": self.status.privacy_status,
             "dry_run": self.dry_run,
+            "notify_subscribers": self.notify_subscribers,
         }
 
 
@@ -63,6 +66,7 @@ def prepare_upload(
     privacy: str = "private",
     publish_at: str | None = None,
     dry_run: bool = True,
+    notify_subscribers: bool = True,
 ) -> UploadPlan:
     path = Path(file_path)
     if not path.is_file():
@@ -79,6 +83,7 @@ def prepare_upload(
         snippet=VideoSnippet(title=title, description=description, tags=tags or []),
         status=VideoStatus(privacy_status=privacy, publish_at=publish_at),
         dry_run=dry_run,
+        notify_subscribers=notify_subscribers,
     )
 
 
@@ -129,7 +134,11 @@ def execute_resumable_upload(
         "X-Upload-Content-Length": str(plan.size),
         "X-Upload-Content-Type": "application/octet-stream",
     }
-    params = {"uploadType": "resumable", "part": "snippet,status"}
+    params = {
+        "uploadType": "resumable",
+        "part": "snippet,status",
+        "notifySubscribers": "true" if plan.notify_subscribers else "false",
+    }
 
     with httpx.Client(timeout=120.0) as client:
         init = client.post(UPLOAD_URL, params=params, headers=headers, json=metadata)
