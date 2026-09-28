@@ -38,6 +38,8 @@ class ProcessReport:
         self.skipped: list[str] = []
         self.quota_spent: int = 0
         self.log_path: Path | None = None
+        # (video_id, примечание) — например, не удалось поставить расписание
+        self.notes: list[tuple[str, str]] = []
 
     def summary(self) -> str:
         lines = [
@@ -50,6 +52,8 @@ class ProcessReport:
             lines.append(f"Лог: {self.log_path}")
         for vid, err in self.failed:
             lines.append(f"  FAIL {vid}: {err}")
+        for vid, note in self.notes:
+            lines.append(f"  ВНИМАНИЕ {vid}: {note}")
         return "\n".join(lines)
 
 
@@ -92,7 +96,7 @@ def apply_plan(
             except ValueError:
                 pass
         try:
-            spent = _apply_one(
+            spent, notes = _apply_one(
                 item,
                 yt,
                 access_token=access_token,
@@ -104,6 +108,9 @@ def apply_plan(
             report.ok.append(vid)
             report.quota_spent += spent
             lines.append(f"OK {vid} quota+={spent} title={item.new_title!r}")
+            for note in notes:
+                report.notes.append((vid, note))
+                lines.append(f"NOTE {vid}: {note}")
         except ClientError as exc:
             report.failed.append((vid, f"{exc.code}: {exc.message}"))
             lines.append(f"FAIL {vid} {exc.code}: {exc.message}")
@@ -142,12 +149,13 @@ def _apply_one(
     yes: bool,
     ledger: ProcessedLedger,
     run_id: str,
-) -> int:
-    """Returns estimated/actual quota units spent for this video."""
+) -> tuple[int, list[str]]:
+    """Returns (quota units spent, notes about degradations for the report)."""
     if item.video is None:
         raise ClientError("Элемент плана без видео", code="BAD_REQUEST")
     vid = item.video.id
     spent = 0
+    notes: list[str] = []
 
     # Маркер добавляется В КОНЕЦ, поэтому место под него резервируется ДО обрезки.
     # Иначе при длинном описании он срезался вместе с хвостом и исчезал с видео.
@@ -183,6 +191,13 @@ def _apply_one(
         if publish_at_rejected:
             log.warning("publish_at_rejected_retry", video_id=vid, error=exc.message)
             yt.update_video(vid, snippet=snippet, status=None, dry_run=dry_run, yes=yes)
+            # Второй videos.update — тоже реальный вызов и тоже 50 юнитов.
+            if not dry_run:
+                spent += 50
+            notes.append(
+                "расписание не поставлено (YouTube отклонил publishAt) — "
+                "обновлены только метаданные; поставьте расписание вручную в Studio"
+            )
         else:
             raise
     if not dry_run:
@@ -219,4 +234,4 @@ def _apply_one(
             run_id=run_id,
         )
 
-    return spent if not dry_run else item.estimated_quota
+    return spent if not dry_run else item.estimated_quota, notes

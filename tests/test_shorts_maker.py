@@ -553,6 +553,79 @@ def test_scheduling_does_not_force_made_for_kids_false(tmp_path: Path) -> None:
     assert "selfDeclaredMadeForKids" not in sent_status
 
 
+def test_publish_at_rejection_is_reported_and_counted(tmp_path: Path) -> None:
+    """Отказ publishAt — не безоговорочный успех.
+
+    Регресс: процессор молча повторял update без status, второй вызов не попадал
+    в счётчик квоты, а видео помечалось как OK без пометки.
+    """
+    from aiyoutubehands.client import ClientError
+    from aiyoutubehands.quota import QuotaEngine
+    from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
+    from aiyoutubehands.shorts_maker.processor import apply_plan
+
+    class _FakeYT:
+        def __init__(self) -> None:
+            self.quota = QuotaEngine(db_path=tmp_path / "q.db")
+            self.statuses: list = []
+
+        def update_video(self, vid, *, snippet=None, status=None, dry_run=False, yes=False):
+            self.statuses.append(status)
+            if status is not None and status.publish_at:
+                raise ClientError("invalidPublishAt", code="BAD_REQUEST")
+            return None
+
+    d = _make_folder(tmp_path, "ш1 Расписание")
+    cand = scan_folder(d)
+    video = VideoResource.from_api({
+        "id": "vid_pa",
+        "snippet": {
+            "title": "Расписание",
+            "description": "",
+            "publishedAt": "",
+            "channelId": "UC_test",
+        },
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT40S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+    })
+    item = PlanItem(
+        index=0,
+        folder=cand,
+        video=video,
+        match_method="title",
+        new_title="Расписание",
+        new_description="Описание",
+        new_tags=["a"],
+        thumbnail_path=None,
+        publish_at="2026-10-01T09:00:00Z",
+        status="к обработке",
+        estimated_quota=50,
+    )
+    plan = ProcessPlan(
+        created_at=datetime.now(MSK),
+        root_path=tmp_path,
+        items=[item],
+        quota_projection={},
+        confirm_phrase="подтверждаю план от 01.01.2026",
+    )
+
+    fake = _FakeYT()
+    report = apply_plan(
+        plan,
+        fake,
+        access_token="fake",
+        dry_run=False,
+        yes=True,
+        ledger=ProcessedLedger(db_path=tmp_path / "p.db"),
+    )
+
+    assert len(fake.statuses) == 2, "должна быть вторая попытка без status"
+    assert report.quota_spent == 100, "второй videos.update тоже тратит 50 юнитов"
+    assert any("расписан" in n.lower() for _v, n in report.notes)
+    assert "расписан" in report.summary().lower()
+
+
 def test_is_already_styled_with_playlist() -> None:
     v = VideoResource.from_api({
         "id": "inpl",
