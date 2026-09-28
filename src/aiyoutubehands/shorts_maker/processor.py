@@ -15,6 +15,7 @@ from aiyoutubehands.shorts_maker.ledger import MARKER, ProcessedLedger
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from aiyoutubehands.models.youtube import VideoResource
     from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
     from aiyoutubehands.youtube import YoutubeService
 
@@ -144,6 +145,37 @@ def apply_plan(
     return report
 
 
+def needs_status_repair(video: VideoResource) -> bool:
+    """True, если у ролика слетели embeddable / publicStatsViewable.
+
+    Возникает после videos.update, в котором эти поля не были переданы.
+    """
+    return not video.status.embeddable or not video.status.public_stats_viewable
+
+
+def build_status_for_update(video: VideoResource, publish_at: str | None) -> VideoStatus | None:
+    """Статус для videos.update с publishAt, сохраняющий остальные поля.
+
+    YouTube заменяет блок ``status`` целиком, поэтому переносим текущие значения
+    ``embeddable`` и ``publicStatsViewable``. Без этого они сбрасываются и
+    ролик перестаёт встраиваться — плеер в Студии показывает заглушку.
+
+    Возвращает ``None``, если расписание ставить не нужно: тогда блок status
+    не трогаем вовсе.
+    """
+    if not publish_at:
+        return None
+    if (video.status.privacy_status or "") != "private":
+        return None
+    return VideoStatus(
+        privacy_status="private",
+        publish_at=publish_at,
+        self_declared_made_for_kids=video.status.self_declared_made_for_kids,
+        embeddable=video.status.embeddable,
+        public_stats_viewable=video.status.public_stats_viewable,
+    )
+
+
 def _apply_one(
     item: PlanItem,
     yt: YoutubeService,
@@ -179,12 +211,7 @@ def _apply_one(
         channel_id=item.video.snippet.channel_id,
     )
 
-    status: VideoStatus | None = None
-    if item.publish_at and item.video.status.privacy_status == "private":
-        status = VideoStatus(
-            privacy_status="private",
-            publish_at=item.publish_at,
-        )
+    status: VideoStatus | None = build_status_for_update(item.video, item.publish_at)
 
     yt.quota.check(50)  # videos.update
     try:

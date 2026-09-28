@@ -49,10 +49,17 @@ class VideoStatus:
     # None = «не задано» и НЕ отправляется; True/False — явная установка.
     # Раньше по умолчанию был False, и любой update со status снимал COPPA-флаг.
     self_declared_made_for_kids: bool | None = None
+    # videos.update заменяет блок status целиком: непереданные поля сбрасываются
+    # к умолчанию. Поэтому embeddable и показ статистики обязаны уходить в запрос
+    # всегда, иначе они слетают и плеер перестаёт встраиваться.
+    embeddable: bool = True
+    public_stats_viewable: bool = True
 
     def to_api(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "privacyStatus": self.privacy_status,
+            "embeddable": self.embeddable,
+            "publicStatsViewable": self.public_stats_viewable,
         }
         if self.self_declared_made_for_kids is not None:
             d["selfDeclaredMadeForKids"] = self.self_declared_made_for_kids
@@ -62,10 +69,15 @@ class VideoStatus:
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> VideoStatus:
+        kids = data.get("selfDeclaredMadeForKids")
         return cls(
             privacy_status=str(data.get("privacyStatus") or "private"),
             publish_at=data.get("publishAt"),
-            self_declared_made_for_kids=bool(data.get("selfDeclaredMadeForKids", False)),
+            # Отсутствие поля в ответе = «не задано» (None): такой флаг не отправляем,
+            # чтобы не переписать настройку, которую мы не видели.
+            self_declared_made_for_kids=None if kids is None else bool(kids),
+            embeddable=bool(data.get("embeddable", True)),
+            public_stats_viewable=bool(data.get("publicStatsViewable", True)),
         )
 
 

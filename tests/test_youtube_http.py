@@ -492,7 +492,14 @@ def test_schedule_video_sets_private_and_publish_at(tmp_path: Path) -> None:
 
     body = json.loads(route.calls[0].request.content)
     assert body["id"] == "vid1"
-    assert body["status"] == {"privacyStatus": "private", "publishAt": "2026-10-01T12:00:00Z"}
+    # embeddable и publicStatsViewable обязаны уходить в запрос: videos.update
+    # заменяет блок status целиком, и без них поля сбрасываются к умолчанию.
+    assert body["status"] == {
+        "privacyStatus": "private",
+        "publishAt": "2026-10-01T12:00:00Z",
+        "embeddable": True,
+        "publicStatsViewable": True,
+    }
     assert quota.used_today() == 51
 
 
