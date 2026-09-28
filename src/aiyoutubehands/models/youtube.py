@@ -116,9 +116,7 @@ class VideoResource:
     snippet: VideoSnippet = field(default_factory=VideoSnippet)
     status: VideoStatus = field(default_factory=VideoStatus)
     content_details: VideoContentDetails = field(default_factory=VideoContentDetails)
-    processing_details: VideoProcessingDetails = field(
-        default_factory=VideoProcessingDetails
-    )
+    processing_details: VideoProcessingDetails = field(default_factory=VideoProcessingDetails)
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -127,12 +125,8 @@ class VideoResource:
             id=str(data.get("id") or ""),
             snippet=VideoSnippet.from_api(data.get("snippet") or {}),
             status=VideoStatus.from_api(data.get("status") or {}),
-            content_details=VideoContentDetails.from_api(
-                data.get("contentDetails") or {}
-            ),
-            processing_details=VideoProcessingDetails.from_api(
-                data.get("processingDetails") or {}
-            ),
+            content_details=VideoContentDetails.from_api(data.get("contentDetails") or {}),
+            processing_details=VideoProcessingDetails.from_api(data.get("processingDetails") or {}),
             raw=data,
         )
 

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from aiyoutubehands.calendar import Calendar, CalendarEntry
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_add_and_list(tmp_path: Path) -> None:
@@ -40,7 +43,11 @@ def test_delete(tmp_path: Path) -> None:
 
 def test_ascii_grid(tmp_path: Path) -> None:
     cal = Calendar(tmp_path / "cal.db")
-    cal.add(CalendarEntry(video_id="v1", title="A", publish_at="2026-10-05T12:00:00Z", status="scheduled"))
+    cal.add(
+        CalendarEntry(
+            video_id="v1", title="A", publish_at="2026-10-05T12:00:00Z", status="scheduled"
+        )
+    )
     grid = cal.ascii_grid(year=2026, month=10)
     assert "2026-10" in grid or "Окт" in grid or "10" in grid
     assert "A" in grid or "v1" in grid

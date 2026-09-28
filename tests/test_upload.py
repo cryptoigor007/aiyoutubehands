@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from aiyoutubehands.upload import prepare_upload, execute_upload_dry_run, UploadError
+from aiyoutubehands.upload import UploadError, execute_upload_dry_run, prepare_upload
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_prepare_and_dry_run(tmp_path: Path) -> None:
@@ -40,6 +43,7 @@ def test_resumable_requires_yes(tmp_path: Path) -> None:
     f.write_bytes(b"data")
     plan = prepare_upload(f, title="T", dry_run=False)
     from aiyoutubehands.upload import execute_resumable_upload
+
     with pytest.raises(UploadError) as ei:
         execute_resumable_upload(plan, access_token="x", yes=False)
     assert ei.value.code == "CONFIRM_REQUIRED"
@@ -94,9 +98,7 @@ def test_notify_subscribers_defaults_to_true(tmp_path: Path) -> None:
     assert plan.notify_subscribers is True
 
 
-def test_resumable_can_disable_subscriber_notification(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_resumable_can_disable_subscriber_notification(tmp_path: Path, monkeypatch) -> None:
     """Публичную загрузку можно сделать без рассылки подписчикам.
 
     Регресс: параметр notifySubscribers не передавался вообще, поэтому
@@ -132,9 +134,7 @@ def test_resumable_can_disable_subscriber_notification(
 
     f = tmp_path / "v.bin"
     f.write_bytes(b"data")
-    plan = prepare_upload(
-        f, title="T", privacy="public", notify_subscribers=False, dry_run=False
-    )
+    plan = prepare_upload(f, title="T", privacy="public", notify_subscribers=False, dry_run=False)
 
     with pytest.raises(UploadError):
         execute_resumable_upload(plan, access_token="fake", yes=True)

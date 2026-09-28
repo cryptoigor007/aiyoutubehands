@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from aiyoutubehands.logging import get_logger
-from aiyoutubehands.models.youtube import VideoResource
+
+if TYPE_CHECKING:
+    from aiyoutubehands.models.youtube import VideoResource
 
 log = get_logger(__name__)
 
@@ -23,10 +26,7 @@ def _slot_datetimes(
 ) -> list[datetime]:
     """Generate candidate slots in MSK."""
     now = start or datetime.now(MSK)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=MSK)
-    else:
-        now = now.astimezone(MSK)
+    now = now.replace(tzinfo=MSK) if now.tzinfo is None else now.astimezone(MSK)
 
     slots: list[datetime] = []
     day = now.date()

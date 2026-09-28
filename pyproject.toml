@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aiyoutubehands"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI YouTube Hands — AI-first CLI for full YouTube channel control"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,6 +43,7 @@ dev = [
     "pytest-cov>=5.0",
     "mypy>=1.10",
     "ruff>=0.5",
+    "respx>=0.21",
     "types-PyYAML",
     "types-requests",
 ]
@@ -74,6 +75,19 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 packages = ["aiyoutubehands"]
+
+[[tool.mypy.overrides]]
+module = ["aiyoutubehands.commands.tray_cmd"]
+# rumps — необязательная зависимость только для macOS, без стабов; в dev она
+# не устанавливается (extra "tray"). Типы внутри проверить нельзя, поэтому
+# отключаем ровно те коды, которые порождает динамическая природа rumps.
+disable_error_code = [
+    "import-not-found",
+    "attr-defined",
+    "misc",
+    "name-defined",
+    "unused-ignore",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

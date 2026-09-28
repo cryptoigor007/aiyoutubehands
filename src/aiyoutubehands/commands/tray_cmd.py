@@ -107,9 +107,7 @@ def _build_app(rumps: object, root_path: str | None) -> object:
 
         def on_terminal(self, _sender: object) -> None:
             # Open Terminal.app in project-friendly way
-            script = (
-                'tell application "Terminal" to do script "ayh process --help"'
-            )
+            script = 'tell application "Terminal" to do script "ayh process --help"'
             subprocess.Popen(["osascript", "-e", script])
 
         def on_quit(self, _sender: object) -> None:

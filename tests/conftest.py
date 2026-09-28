@@ -25,10 +25,13 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _SANDBOX = Path(tempfile.mkdtemp(prefix="ayh-tests-"))
 

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
 from aiyoutubehands.main import cli
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_auth_login_stub_saves(tmp_path: Path, monkeypatch) -> None:
@@ -18,7 +21,7 @@ def test_auth_login_stub_saves(tmp_path: Path, monkeypatch) -> None:
         input="test-pass\n",
     )
     assert r.exit_code == 0, r.output
-    token_file = tmp_path / ".config" / "aiyoutubehands" / "token.age"
+    tmp_path / ".config" / "aiyoutubehands" / "token.age"
     # path may use expand - check message
     assert "OK" in r.output or "сохранён" in r.output
 

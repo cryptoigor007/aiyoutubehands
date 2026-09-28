@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import pytest
-import httpx
 
 from aiyoutubehands.client import (
-    HttpClient,
-    ClientError,
     CircuitOpenError,
+    ClientError,
+    HttpClient,
     map_http_error,
 )
 

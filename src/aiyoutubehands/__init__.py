@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 
 def _version_from_file() -> str:

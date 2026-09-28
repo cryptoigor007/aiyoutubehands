@@ -10,14 +10,16 @@ import time
 import webbrowser
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.token import EncryptedJsonStore, TokenData, TokenError, TokenStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 log = get_logger(__name__)
 
@@ -141,12 +143,11 @@ def desktop_flow_authorize(
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             message = (
-                "<html><body><p>Авторизация завершена. "
-                "Можно закрыть это окно.</p></body></html>"
+                "<html><body><p>Авторизация завершена. Можно закрыть это окно.</p></body></html>"
             )
             self.wfile.write(message.encode("utf-8"))
 
-        def log_message(self, format: str, *args: Any) -> None:
+        def log_message(self, fmt: str, *args: Any) -> None:
             return
 
     server = HTTPServer(("127.0.0.1", 0), CallbackHandler)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from io import StringIO
 
-from aiyoutubehands.logging import get_logger, setup_logging, correlation_id_var
+from aiyoutubehands.logging import correlation_id_var, get_logger, setup_logging
 
 
 def test_setup_logging_json() -> None:

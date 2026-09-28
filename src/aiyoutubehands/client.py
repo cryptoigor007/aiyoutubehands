@@ -68,6 +68,7 @@ def map_http_error(status: int, body: str = "") -> ClientError:
     reason = ""
     try:
         import json as _json
+
         parsed = _json.loads(body) if body.strip().startswith("{") else {}
         errors = (parsed.get("error") or {}).get("errors") or []
         if errors and isinstance(errors[0], dict):
@@ -223,7 +224,9 @@ class HttpClient:
                         except ValueError:
                             err.retry_after = None
                     if err.retryable and attempt < self.max_retries:
-                        delay = err.retry_after if err.retry_after is not None else 0.5 * (2**attempt)
+                        delay = (
+                            err.retry_after if err.retry_after is not None else 0.5 * (2**attempt)
+                        )
                         delay = max(0.0, min(float(delay), 60.0))
                         time.sleep(delay)
                         last_exc = err

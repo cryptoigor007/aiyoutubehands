@@ -78,20 +78,14 @@ class AppConfig(BaseModel):
 def get_config_dir() -> Path:
     """Return ~/.config/aiyoutubehands (or $XDG_CONFIG_HOME)."""
     xdg = os.environ.get("XDG_CONFIG_HOME")
-    if xdg:
-        base = Path(xdg)
-    else:
-        base = Path.home() / ".config"
+    base = Path(xdg) if xdg else Path.home() / ".config"
     return base / "aiyoutubehands"
 
 
 def get_state_dir() -> Path:
     """Return ~/.local/state/aiyoutubehands (or $XDG_STATE_HOME)."""
     xdg = os.environ.get("XDG_STATE_HOME")
-    if xdg:
-        base = Path(xdg)
-    else:
-        base = Path.home() / ".local" / "state"
+    base = Path(xdg) if xdg else Path.home() / ".local" / "state"
     return base / "aiyoutubehands"
 
 

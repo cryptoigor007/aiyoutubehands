@@ -29,16 +29,19 @@ def register(cli: click.Group) -> None:
             items = yt.list_playlists(dry_run=False)
         finally:
             client.close()
+        if not isinstance(items, list):
+            click.echo(json.dumps(items, ensure_ascii=False, indent=2))
+            return
         if as_json:
             click.echo(
                 json.dumps(
-                    [{"id": p.id, "title": p.title, "items": p.item_count} for p in items],  # type: ignore[union-attr]
+                    [{"id": p.id, "title": p.title, "items": p.item_count} for p in items],
                     ensure_ascii=False,
                     indent=2,
                 )
             )
         else:
-            for p in items:  # type: ignore[union-attr]
+            for p in items:
                 click.echo(f"{p.id}  [{p.item_count}]  {p.title}")
 
     @playlist.command("create")

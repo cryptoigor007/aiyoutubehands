@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import Any
 
 import click
 
@@ -18,7 +19,7 @@ def register(cli: click.Group) -> None:
         """Диагностика окружения и конфигурации."""
         log = ctx.obj["log"]
         log.info("doctor_started")
-        result: dict = {
+        result: dict[str, Any] = {
             "ok": True,
             "version": __version__,
             "checks": {},

@@ -1,4 +1,3 @@
-
 """Exit code mapping tests."""
 
 from __future__ import annotations

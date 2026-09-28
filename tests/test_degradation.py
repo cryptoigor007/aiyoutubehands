@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from aiyoutubehands.client import HttpClient, CircuitOpenError, map_http_error
-from aiyoutubehands.quota import QuotaEngine, QuotaError
-from aiyoutubehands.token import TokenStore, TokenError, encrypt_bytes, decrypt_bytes
 from aiyoutubehands.ai import AIEngine
+from aiyoutubehands.client import CircuitOpenError, HttpClient, map_http_error
+from aiyoutubehands.quota import QuotaEngine, QuotaError
+from aiyoutubehands.token import TokenError, decrypt_bytes
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_scaffold_placeholder() -> None:

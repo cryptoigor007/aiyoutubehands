@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.shorts_maker.folder_scanner import FolderCandidate, clean_folder_title
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 log = get_logger(__name__)
 
@@ -22,12 +25,15 @@ class ExtractedMeta:
     source_notes: list[str] = field(default_factory=list)
 
 
-def _load_json(path: Path) -> dict | list | None:
+def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
     except (OSError, json.JSONDecodeError) as exc:
         log.warning("json_load_failed", path=str(path), error=str(exc))
         return None
+    if isinstance(data, (dict, list)):
+        return data
+    return None
 
 
 def _description_from_editing_plan(path: Path) -> str | None:
@@ -65,9 +71,7 @@ def _hashtags_from_editing_plan(path: Path) -> list[str]:
                     tags.extend(str(t).strip().lstrip("#") for t in val if str(t).strip())
                 elif isinstance(val, str) and val.strip():
                     tags.extend(
-                        p.strip().lstrip("#")
-                        for p in re.split(r"[\s,]+", val)
-                        if p.strip()
+                        p.strip().lstrip("#") for p in re.split(r"[\s,]+", val) if p.strip()
                     )
     # Top-level
     for key in ("hashtags", "tags"):

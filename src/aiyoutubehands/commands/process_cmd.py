@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import click
 
 from aiyoutubehands.client import require_access_token
 from aiyoutubehands.commands.security import require_passphrase
-
 
 _CONFIRM_RE = re.compile(r"^подтверждаю план от (\d{2}\.\d{2}\.\d{4}) #([0-9a-f]{12})$")
 
@@ -135,7 +135,7 @@ def register(cli: click.Group) -> None:
                     "dry-run: список видео канала не запрашивается — "
                     "сопоставление будет пустым. Уберите --dry-run для реального плана."
                 )
-                videos: list = []
+                videos: list[Any] = []
             else:
                 click.echo(f"Загружаю видео канала (последние {days} дн.) …")
                 raw = yt.list_channel_videos(max_age_days=days, dry_run=False)
@@ -190,7 +190,7 @@ def register(cli: click.Group) -> None:
     @click.option(
         "--confirm",
         required=True,
-        help='Точная фраза: «подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>»',
+        help="Точная фраза: «подтверждаю план от ДД.ММ.ГГГГ #<хэш плана>»",
     )
     @click.option(
         "--path",
@@ -247,7 +247,7 @@ def register(cli: click.Group) -> None:
         try:
             candidates = scan_root(root_path)
             if dry_run:
-                videos: list = []
+                videos: list[Any] = []
             else:
                 raw = yt.list_channel_videos(max_age_days=days, dry_run=False)
                 videos = raw if isinstance(raw, list) else []
@@ -369,7 +369,7 @@ def register(cli: click.Group) -> None:
 
             if dry_run:
                 click.echo("dry-run: канал не запрашивается")
-                videos: list = []
+                videos: list[Any] = []
             else:
                 raw = yt.list_channel_videos(max_age_days=days, dry_run=False)
                 videos = raw if isinstance(raw, list) else []
@@ -414,10 +414,9 @@ def register(cli: click.Group) -> None:
             if phrase.strip() != plan.confirm_phrase:
                 raise click.ClickException("Фраза подтверждения не совпала — отмена.")
 
-            if not dry_run and not yes:
-                if not click.confirm("Выполнить изменения на канале?"):
-                    click.echo("Отмена.")
-                    return
+            if not dry_run and not yes and not click.confirm("Выполнить изменения на канале?"):
+                click.echo("Отмена.")
+                return
 
             token = require_access_token(client.access_token)
             report = apply_plan(
@@ -469,7 +468,7 @@ def _resolve_playlist(value: str | None, yt: object | None = None) -> str | None
         return None
 
 
-def _plan_to_dict(plan: object) -> dict:
+def _plan_to_dict(plan: object) -> dict[str, Any]:
     from aiyoutubehands.shorts_maker.plan import ProcessPlan
 
     if not isinstance(plan, ProcessPlan):

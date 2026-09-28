@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from aiyoutubehands.client import ClientError
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.models.youtube import VideoSnippet, VideoStatus
-from aiyoutubehands.quota import QuotaEngine
 from aiyoutubehands.shorts_maker.ledger import MARKER, ProcessedLedger
-from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
-from aiyoutubehands.youtube import YoutubeService
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
+    from aiyoutubehands.youtube import YoutubeService
 
 log = get_logger(__name__)
 
@@ -72,7 +75,6 @@ def apply_plan(
     report.log_path = log_path
     run_id = log_path.stem
     # Hard rule: never mutate Shorts Maker source folders
-    root = plan.root_path.resolve()
     lines: list[str] = [
         f"run={run_id}",
         f"root={plan.root_path}",
@@ -88,13 +90,8 @@ def apply_plan(
         if item.video is None:
             raise ClientError("Элемент плана без видео", code="BAD_REQUEST")
         vid = item.video.id
-        # Local Shorts Maker files are read-only for process
-        if item.thumbnail_path is not None:
-            try:
-                item.thumbnail_path.resolve().relative_to(root)
-                # cover is under root — OK to READ only (set_thumbnail reads bytes)
-            except ValueError:
-                pass
+        # Локальные файлы Shorts Maker для process только на чтение:
+        # set_thumbnail сам читает байты обложки и ничего не пишет на диск.
         try:
             spent, notes = _apply_one(
                 item,
@@ -184,9 +181,7 @@ def _apply_one(
         # publishAt rejected (already published once) → retry without status only
         msg = (exc.message or "").lower()
         publish_at_rejected = status is not None and (
-            "publishat" in msg
-            or "invalidpublishat" in msg
-            or "invalid publish" in msg
+            "publishat" in msg or "invalidpublishat" in msg or "invalid publish" in msg
         )
         if publish_at_rejected:
             log.warning("publish_at_rejected_retry", video_id=vid, error=exc.message)

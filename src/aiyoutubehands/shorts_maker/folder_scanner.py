@@ -105,7 +105,9 @@ def scan_folder(folder: Path) -> FolderCandidate:
 
     # Files
     cand.video_file = _find_first(folder, ["*.mp4", "*.MP4"])
-    cand.cover = _find_first(folder, ["*_final_cover.jpg", "*_final_cover.jpeg", "*_final_cover.png"])
+    cand.cover = _find_first(
+        folder, ["*_final_cover.jpg", "*_final_cover.jpeg", "*_final_cover.png"]
+    )
     cand.titles_txt = _find_first(folder, ["*_titles.txt", "*titles*.txt"])
     cand.hashtags_txt = _find_first(folder, ["*_hashtags.txt", "*hashtags*.txt"])
     cand.hooks_txt = _find_first(folder, ["*_hooks.txt"])

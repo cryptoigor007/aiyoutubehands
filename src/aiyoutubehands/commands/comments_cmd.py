@@ -34,16 +34,19 @@ def register(cli: click.Group) -> None:
             items = yt.list_comment_threads(video_id, dry_run=False)
         finally:
             client.close()
+        if not isinstance(items, list):
+            click.echo(json.dumps(items, ensure_ascii=False, indent=2))
+            return
         if as_json:
             click.echo(
                 json.dumps(
-                    [{"id": c.id, "author": c.author, "text": c.text} for c in items],  # type: ignore[union-attr]
+                    [{"id": c.id, "author": c.author, "text": c.text} for c in items],
                     ensure_ascii=False,
                     indent=2,
                 )
             )
         else:
-            for c in items:  # type: ignore[union-attr]
+            for c in items:
                 click.echo(f"{c.id}  {c.author}: {c.text[:80]}")
 
     @comments.command("reply")

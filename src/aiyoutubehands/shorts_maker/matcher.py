@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from aiyoutubehands.logging import get_logger
-from aiyoutubehands.models.youtube import VideoResource
-from aiyoutubehands.shorts_maker.folder_scanner import FolderCandidate
+
+if TYPE_CHECKING:
+    from aiyoutubehands.models.youtube import VideoResource
+    from aiyoutubehands.shorts_maker.folder_scanner import FolderCandidate
 
 log = get_logger(__name__)
 
@@ -168,8 +171,7 @@ def match_candidates(
                         video=None,
                         method="none",
                         reason="неоднозначный title: несколько видео",
-                        notes=dup_note
-                        or f"video_ids={','.join(related_vids[:8])}",
+                        notes=dup_note or f"video_ids={','.join(related_vids[:8])}",
                         related_folders=peers,
                         related_video_ids=related_vids,
                     )
@@ -178,20 +180,20 @@ def match_candidates(
 
         # b) Video ID hint
         if matched is None and cand.video_id_hint:
-            v = by_id.get(cand.video_id_hint)
-            if v and v.id not in used_ids:
-                matched = v
+            hint_video = by_id.get(cand.video_id_hint)
+            if hint_video and hint_video.id not in used_ids:
+                matched = hint_video
                 method = "video_id"
-            elif v and v.id in used_ids:
+            elif hint_video and hint_video.id in used_ids:
                 results.append(
                     MatchResult(
                         candidate=cand,
-                        video=v,
+                        video=hint_video,
                         method="video_id",
                         reason="video_id уже сопоставлен другой папке",
                         notes=dup_note,
                         related_folders=peers,
-                        related_video_ids=[v.id],
+                        related_video_ids=[hint_video.id],
                     )
                 )
                 continue
@@ -201,11 +203,7 @@ def match_candidates(
             from aiyoutubehands.shorts_maker.media import probe_duration_seconds
 
             local_dur = probe_duration_seconds(cand.video_file)
-            recent = [
-                v
-                for v in videos
-                if v.id not in used_ids and _is_recent(v, max_age_days)
-            ]
+            recent = [v for v in videos if v.id not in used_ids and _is_recent(v, max_age_days)]
             if local_dur is not None:
                 dur_matches = [
                     v
@@ -260,9 +258,7 @@ def match_candidates(
             # do not mark used_ids — another folder might be the real one
             continue
 
-        if matched.id in processed_ids or MARKER_PROCESSED in (
-            matched.snippet.description or ""
-        ):
+        if matched.id in processed_ids or MARKER_PROCESSED in (matched.snippet.description or ""):
             results.append(
                 MatchResult(
                     candidate=cand,
@@ -283,10 +279,7 @@ def match_candidates(
                     candidate=cand,
                     video=matched,
                     method=method,
-                    reason=(
-                        f"processingStatus="
-                        f"{matched.processing_details.processing_status}"
-                    ),
+                    reason=(f"processingStatus={matched.processing_details.processing_status}"),
                     related_video_ids=[matched.id],
                 )
             )
@@ -344,4 +337,4 @@ def _is_recent(video: VideoResource, max_age_days: int) -> bool:
         dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
     except ValueError:
         return False
-    return dt >= datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    return dt >= datetime.now(UTC) - timedelta(days=max_age_days)

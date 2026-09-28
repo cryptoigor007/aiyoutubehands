@@ -9,6 +9,7 @@ Full Mozilla age CLI interop is not implemented yet; blob is application-specifi
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
@@ -249,9 +250,7 @@ class TokenStore:
                     code="TOKEN_BAD_KEY",
                     action="Передайте тот же passphrase",
                 )
-            key, _ = derive_key_from_passphrase(
-                self._passphrase, salt, n=_scrypt_n_for_mode(mode)
-            )
+            key, _ = derive_key_from_passphrase(self._passphrase, salt, n=_scrypt_n_for_mode(mode))
         else:
             if self._key is None:
                 # allow passphrase store to open raw only if key derived wrongly — reject
@@ -290,10 +289,8 @@ class TokenStore:
         }
         with self.audit_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        try:
+        with contextlib.suppress(OSError):
             self.audit_path.chmod(0o600)
-        except OSError:
-            pass
 
     def rotate_access(self, new_access: str, expires_at: int) -> TokenData:
         """Update access token (after refresh)."""
@@ -324,9 +321,7 @@ class EncryptedJsonStore:
         raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
         key, salt = derive_key_from_passphrase(self._passphrase, n=SCRYPT_N)
         payload = encrypt_bytes(raw, key)
-        _write_private(
-            self.path, pack_blob(payload, mode=BLOB_MODE_PASSPHRASE_V2, salt=salt)
-        )
+        _write_private(self.path, pack_blob(payload, mode=BLOB_MODE_PASSPHRASE_V2, salt=salt))
 
     def load(self) -> dict[str, Any]:
         if not self.path.is_file():
@@ -341,9 +336,7 @@ class EncryptedJsonStore:
                 "Файл OAuth-клиента должен быть зашифрован паролем",
                 code="CLIENT_SECRETS_UNENCRYPTED",
             )
-        key, _ = derive_key_from_passphrase(
-            self._passphrase, salt, n=_scrypt_n_for_mode(mode)
-        )
+        key, _ = derive_key_from_passphrase(self._passphrase, salt, n=_scrypt_n_for_mode(mode))
         raw = decrypt_bytes(payload, key)
         try:
             data = json.loads(raw.decode("utf-8"))

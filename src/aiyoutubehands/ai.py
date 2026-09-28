@@ -25,7 +25,9 @@ class LocalStubProvider:
         if "tags" in p or "тег" in p:
             return "youtube, ai, tutorial, automation, cli"
         if "script" in p or "сценари" in p:
-            return "Привет! Сегодня мы поговорим о...\n\n1. Введение\n2. Основная часть\n3. Заключение"
+            return (
+                "Привет! Сегодня мы поговорим о...\n\n1. Введение\n2. Основная часть\n3. Заключение"
+            )
         if "thumbnail" in p or "обложк" in p:
             return "Bright thumbnail: bold text 'AI YT', high contrast, face looking at camera"
         if "chapter" in p or "глав" in p:

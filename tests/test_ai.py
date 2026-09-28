@@ -32,5 +32,6 @@ def test_thumbnail_prompt() -> None:
 
 def test_russian_title_keyword() -> None:
     from aiyoutubehands.ai import LocalStubProvider
+
     text = LocalStubProvider().complete("Сгенерируй заголовок про Python")
     assert "AI YouTube Hands" in text or len(text) > 5

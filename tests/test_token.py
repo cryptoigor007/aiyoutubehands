@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from aiyoutubehands.token import (
     EncryptedJsonStore,
+    TokenData,
     TokenError,
     TokenStore,
-    TokenData,
-    encrypt_bytes,
     decrypt_bytes,
+    encrypt_bytes,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_encrypt_decrypt_roundtrip() -> None:
@@ -101,7 +104,9 @@ def test_passphrase_wrong_fails(tmp_path: Path) -> None:
 def test_versioned_blob_magic(tmp_path: Path) -> None:
     path = tmp_path / "token.ayh"
     key = b"k" * 32
-    TokenStore(path=path, key=key).save(TokenData(access_token="a", refresh_token="r", expires_at=1))
+    TokenStore(path=path, key=key).save(
+        TokenData(access_token="a", refresh_token="r", expires_at=1)
+    )
     raw = path.read_bytes()
     assert raw.startswith(b"AYH1")
 
@@ -171,7 +176,9 @@ def test_legacy_token_store_still_loads(tmp_path: Path) -> None:
     p = tmp_path / "legacy-token.age"
     key, salt = derive_key_from_passphrase("pw", None, n=2**14)
     payload = encrypt_bytes(
-        json.dumps({"access_token": "old-at", "refresh_token": "r", "expires_at": 9999999999}).encode(),
+        json.dumps(
+            {"access_token": "old-at", "refresh_token": "r", "expires_at": 9999999999}
+        ).encode(),
         key,
     )
     p.write_bytes(pack_blob(payload, mode=BLOB_MODE_PASSPHRASE, salt=salt))

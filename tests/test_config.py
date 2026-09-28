@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
@@ -16,6 +16,9 @@ from aiyoutubehands.config import (
     load_config_optional,
     save_channel_id,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_get_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

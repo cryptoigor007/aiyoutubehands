@@ -45,9 +45,7 @@ class ProcessedLedger:
 
     def is_processed(self, video_id: str) -> bool:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM processed WHERE video_id = ?", (video_id,)
-            ).fetchone()
+            row = conn.execute("SELECT 1 FROM processed WHERE video_id = ?", (video_id,)).fetchone()
         return row is not None
 
     def all_ids(self) -> set[str]:

@@ -7,16 +7,19 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from aiyoutubehands.logging import get_logger
-from aiyoutubehands.models.youtube import VideoResource
-from aiyoutubehands.quota import QuotaEngine
-from aiyoutubehands.shorts_maker.folder_scanner import FolderCandidate
-from aiyoutubehands.shorts_maker.matcher import MatchResult
 from aiyoutubehands.shorts_maker.metadata_extractor import ExtractedMeta, extract_metadata
 from aiyoutubehands.shorts_maker.scheduler import format_slot_local, propose_slots
 from aiyoutubehands.youtube import COST
+
+if TYPE_CHECKING:
+    from aiyoutubehands.models.youtube import VideoResource
+    from aiyoutubehands.quota import QuotaEngine
+    from aiyoutubehands.shorts_maker.folder_scanner import FolderCandidate
+    from aiyoutubehands.shorts_maker.matcher import MatchResult
 
 log = get_logger(__name__)
 
@@ -54,7 +57,7 @@ class ProcessPlan:
     created_at: datetime
     root_path: Path
     items: list[PlanItem]
-    quota_projection: dict
+    quota_projection: dict[str, Any]
     confirm_phrase: str  # expected confirmation string
 
     def actionable_items(self) -> list[PlanItem]:
@@ -87,7 +90,7 @@ def plan_fingerprint(items: list[PlanItem]) -> str:
         }
         for i in sorted(
             (i for i in items if i.actionable),
-            key=lambda i: (i.video.id if i.video else ""),
+            key=lambda i: i.video.id if i.video else "",
         )
     ]
     blob = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -138,24 +141,24 @@ def build_plan(
     items: list[PlanItem] = []
     ops: list[tuple[str, int]] = []
 
-    for idx, (m, meta, slot, status) in enumerate(
+    for idx, (m, meta_item, slot, status) in enumerate(
         zip(matches, metas, slots, statuses, strict=True), start=1
     ):
-        if status != "к обработке" or meta is None or m.video is None:
+        if status != "к обработке" or meta_item is None or m.video is None:
             items.append(
                 PlanItem(
                     index=idx,
                     folder=m.candidate,
                     video=m.video,
                     match_method=m.method,
-                    new_title=meta.title if meta else m.candidate.clean_title,
-                    new_description=meta.description if meta else "",
-                    new_tags=meta.tags if meta else [],
-                    thumbnail_path=meta.thumbnail if meta else None,
+                    new_title=meta_item.title if meta_item else m.candidate.clean_title,
+                    new_description=meta_item.description if meta_item else "",
+                    new_tags=meta_item.tags if meta_item else [],
+                    thumbnail_path=meta_item.thumbnail if meta_item else None,
                     publish_at=None,
                     status=status,
                     estimated_quota=0,
-                    meta_notes=meta.source_notes if meta else [],
+                    meta_notes=meta_item.source_notes if meta_item else [],
                 )
             )
             continue
@@ -163,7 +166,7 @@ def build_plan(
         # Quota: videos.update always; thumbnails.set if cover; playlistItems.insert if set
         est = COST["videos.update"]
         ops.append(("videos.update", COST["videos.update"]))
-        if meta.thumbnail:
+        if meta_item.thumbnail:
             est += COST["thumbnails.set"]
             ops.append(("thumbnails.set", COST["thumbnails.set"]))
         if playlist_id:
@@ -179,19 +182,19 @@ def build_plan(
                 folder=m.candidate,
                 video=m.video,
                 match_method=m.method,
-                new_title=meta.title,
-                new_description=meta.description,
-                new_tags=meta.tags,
-                thumbnail_path=meta.thumbnail,
+                new_title=meta_item.title,
+                new_description=meta_item.description,
+                new_tags=meta_item.tags,
+                thumbnail_path=meta_item.thumbnail,
                 publish_at=publish_at,
                 status="к обработке",
                 estimated_quota=est,
-                meta_notes=meta.source_notes,
+                meta_notes=meta_item.source_notes,
                 playlist_id=playlist_id,
             )
         )
 
-    projection: dict = {
+    projection: dict[str, Any] = {
         "used_today": 0,
         "extra": sum(u for _, u in ops),
         "projected_total": sum(u for _, u in ops),
@@ -229,7 +232,11 @@ def render_plan_table(plan: ProcessPlan) -> str:
     ]
     rows: list[list[str]] = []
     for item in plan.items:
-        desc_short = (item.new_description[:40] + "…") if len(item.new_description) > 40 else item.new_description
+        desc_short = (
+            (item.new_description[:40] + "…")
+            if len(item.new_description) > 40
+            else item.new_description
+        )
         tags_short = ", ".join(item.new_tags[:5])
         if len(item.new_tags) > 5:
             tags_short += "…"
@@ -253,7 +260,9 @@ def render_plan_table(plan: ProcessPlan) -> str:
         )
 
     # Simple fixed-width-ish table
-    col_widths = [max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)]
+    col_widths = [
+        max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)
+    ]
     col_widths = [min(w, 40) for w in col_widths]
 
     def fmt_row(cols: list[str]) -> str:

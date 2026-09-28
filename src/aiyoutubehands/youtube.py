@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -18,7 +19,9 @@ from aiyoutubehands.models.youtube import (
     VideoSnippet,
     VideoStatus,
 )
-from aiyoutubehands.quota import QuotaEngine
+
+if TYPE_CHECKING:
+    from aiyoutubehands.quota import QuotaEngine
 
 log = get_logger(__name__)
 
@@ -162,7 +165,7 @@ class YoutubeService:
         Uses playlistItems.list (1 unit/page) + batched videos.list (1 unit per 50 ids).
         Filters by publishedAt within max_age_days when possible.
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         if dry_run:
             return {
@@ -176,9 +179,7 @@ class YoutubeService:
         if not isinstance(channel, ChannelResource):
             raise ClientError("Не удалось получить канал", code="CHANNEL_NOT_FOUND")
         uploads_id = (
-            (channel.raw.get("contentDetails") or {})
-            .get("relatedPlaylists", {})
-            .get("uploads")
+            (channel.raw.get("contentDetails") or {}).get("relatedPlaylists", {}).get("uploads")
         )
         if not uploads_id:
             raise ClientError(
@@ -190,7 +191,7 @@ class YoutubeService:
         # Collect video IDs from uploads playlist
         video_ids: list[str] = []
         page_token: str | None = None
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
 
         while len(video_ids) < max_results:
             self.quota.check(COST["playlistItems.list"])
@@ -212,9 +213,7 @@ class YoutubeService:
                 published = sn.get("publishedAt") or ""
                 if published:
                     try:
-                        pub_dt = datetime.fromisoformat(
-                            published.replace("Z", "+00:00")
-                        )
+                        pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
                         if pub_dt < cutoff:
                             stop_early = True
                             break
@@ -494,9 +493,7 @@ class YoutubeService:
         )
         if dry_run:
             return data if isinstance(data, dict) else {"dry_run": True}
-        self.quota.consume(
-            "comments.setModerationStatus", COST["comments.setModerationStatus"]
-        )
+        self.quota.consume("comments.setModerationStatus", COST["comments.setModerationStatus"])
         return {"ok": True, "comment_id": comment_id, "status": moderation_status}
 
     def list_captions(
@@ -564,7 +561,8 @@ class YoutubeService:
                     retryable=True,
                 )
             self.quota.consume("captions.insert", COST["captions.insert"])
-            return resp.json()
+            inserted: dict[str, Any] = resp.json()
+            return inserted
 
     def set_thumbnail(
         self,
@@ -604,9 +602,7 @@ class YoutubeService:
             self.quota.consume("thumbnails.set", COST["thumbnails.set"])
             return resp.json() if resp.content else {"ok": True}
 
-    def search(
-        self, query: str, *, max_results: int = 10, dry_run: bool = False
-    ) -> dict[str, Any]:
+    def search(self, query: str, *, max_results: int = 10, dry_run: bool = False) -> dict[str, Any]:
         self.quota.check(COST["search.list"])
         data = self.client.get(
             "search",

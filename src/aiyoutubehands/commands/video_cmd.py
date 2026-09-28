@@ -132,9 +132,7 @@ def register(cli: click.Group) -> None:
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
             token = require_access_token(client.access_token)
-            yt.set_thumbnail(
-                video_id, image_path, access_token=token, dry_run=False, yes=True
-            )
+            yt.set_thumbnail(video_id, image_path, access_token=token, dry_run=False, yes=True)
         finally:
             client.close()
         click.echo("video thumbnail: OK")

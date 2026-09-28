@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Relative to repository root (parent of src/)
 RULES_REL = Path("docs") / "AGENT_PROMPT_PROCESS.md"
@@ -51,7 +55,7 @@ def load_rules_text() -> str | None:
         return None
 
 
-def print_safety_banner(*, echo: object | None = None) -> None:
+def print_safety_banner(*, echo: Callable[[str], None] | None = None) -> None:
     """Print safety banner to stdout (or click.echo if provided)."""
     out = echo if echo is not None else print
     out(BANNER)

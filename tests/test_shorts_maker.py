@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from aiyoutubehands.models.youtube import VideoResource
+from aiyoutubehands.quota import QuotaEngine
 from aiyoutubehands.shorts_maker.folder_scanner import (
     clean_folder_title,
     scan_folder,
@@ -19,9 +20,10 @@ from aiyoutubehands.shorts_maker.ledger import ProcessedLedger
 from aiyoutubehands.shorts_maker.matcher import is_already_styled, match_candidates
 from aiyoutubehands.shorts_maker.metadata_extractor import extract_metadata
 from aiyoutubehands.shorts_maker.plan import build_plan, render_plan_table
-from aiyoutubehands.shorts_maker.scheduler import propose_slots, format_slot_local
-from aiyoutubehands.quota import QuotaEngine
+from aiyoutubehands.shorts_maker.scheduler import format_slot_local, propose_slots
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 MSK = ZoneInfo("Europe/Moscow")
 
@@ -127,55 +129,63 @@ def test_extract_from_titles_when_no_plan(tmp_path: Path) -> None:
 
 
 def test_is_already_styled() -> None:
-    v = VideoResource.from_api({
-        "id": "x",
-        "snippet": {
-            "title": "A proper long enough title here",
-            "description": "x" * 60,
-            "tags": ["a", "b", "c"],
-            "thumbnails": {"maxres": {"url": "http://x", "width": 1280, "height": 720}},
-        },
-        "status": {"privacyStatus": "public"},
-    })
+    v = VideoResource.from_api(
+        {
+            "id": "x",
+            "snippet": {
+                "title": "A proper long enough title here",
+                "description": "x" * 60,
+                "tags": ["a", "b", "c"],
+                "thumbnails": {"maxres": {"url": "http://x", "width": 1280, "height": 720}},
+            },
+            "status": {"privacyStatus": "public"},
+        }
+    )
     assert is_already_styled(v) is True
 
-    v2 = VideoResource.from_api({
-        "id": "y",
-        "snippet": {
-            "title": "short",
-            "description": "x",
-            "tags": [],
-            "thumbnails": {},
-        },
-        "status": {"privacyStatus": "private"},
-    })
+    v2 = VideoResource.from_api(
+        {
+            "id": "y",
+            "snippet": {
+                "title": "short",
+                "description": "x",
+                "tags": [],
+                "thumbnails": {},
+            },
+            "status": {"privacyStatus": "private"},
+        }
+    )
     assert is_already_styled(v2) is False
 
-    v3 = VideoResource.from_api({
-        "id": "z",
-        "snippet": {
-            "title": "t",
-            "description": "hello #ayh_processed",
-        },
-        "status": {"privacyStatus": "private"},
-    })
+    v3 = VideoResource.from_api(
+        {
+            "id": "z",
+            "snippet": {
+                "title": "t",
+                "description": "hello #ayh_processed",
+            },
+            "status": {"privacyStatus": "private"},
+        }
+    )
     assert is_already_styled(v3) is True
 
 
 def test_match_by_title(tmp_path: Path) -> None:
     d = _make_folder(tmp_path, "ш1 Почему люди завидуют?")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid1",
-        "snippet": {
-            "title": "Почему люди завидуют?",
-            "description": "",
-            "publishedAt": "",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT45S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid1",
+            "snippet": {
+                "title": "Почему люди завидуют?",
+                "description": "",
+                "publishedAt": "",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT45S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     results = match_candidates([cand], [video])
     assert len(results) == 1
     assert results[0].method == "title"
@@ -187,12 +197,14 @@ def test_match_by_title(tmp_path: Path) -> None:
 def test_match_skip_processed_ledger(tmp_path: Path) -> None:
     d = _make_folder(tmp_path, "ш1 Почему люди завидуют?")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid1",
-        "snippet": {"title": "Почему люди завидуют?", "description": ""},
-        "status": {"privacyStatus": "private"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid1",
+            "snippet": {"title": "Почему люди завидуют?", "description": ""},
+            "status": {"privacyStatus": "private"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     results = match_candidates([cand], [video], processed_ids={"vid1"})
     assert results[0].reason.startswith("уже обработано")
 
@@ -201,11 +213,13 @@ def test_scheduler_skips_tue_fri() -> None:
     # Fixed Monday 2026-09-28 10:00 MSK
     now = datetime(2026, 9, 28, 10, 0, tzinfo=MSK)
     videos = [
-        VideoResource.from_api({
-            "id": f"v{i}",
-            "snippet": {"title": "t", "publishedAt": ""},
-            "status": {"privacyStatus": "private"},
-        })
+        VideoResource.from_api(
+            {
+                "id": f"v{i}",
+                "snippet": {"title": "t", "publishedAt": ""},
+                "status": {"privacyStatus": "private"},
+            }
+        )
         for i in range(6)
     ]
     slots = propose_slots(videos, now=now)
@@ -218,11 +232,13 @@ def test_scheduler_skips_tue_fri() -> None:
 
 
 def test_scheduler_unavailable_for_public() -> None:
-    v = VideoResource.from_api({
-        "id": "pub",
-        "snippet": {"title": "t", "publishedAt": "2026-01-01T00:00:00Z"},
-        "status": {"privacyStatus": "public"},
-    })
+    v = VideoResource.from_api(
+        {
+            "id": "pub",
+            "snippet": {"title": "t", "publishedAt": "2026-01-01T00:00:00Z"},
+            "status": {"privacyStatus": "public"},
+        }
+    )
     slots = propose_slots([v])
     assert slots == [None]
     assert format_slot_local(None) == "расписание недоступно"
@@ -248,17 +264,19 @@ def test_build_plan_and_table(tmp_path: Path) -> None:
         hashtags="#a #b #c",
     )
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid1",
-        "snippet": {
-            "title": "Почему люди завидуют?",
-            "description": "",
-            "publishedAt": "",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid1",
+            "snippet": {
+                "title": "Почему люди завидуют?",
+                "description": "",
+                "publishedAt": "",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     matches = match_candidates([cand], [video])
     quota = QuotaEngine(db_path=tmp_path / "q.db")
     plan = build_plan(matches, root_path=tmp_path, quota=quota)
@@ -287,30 +305,33 @@ def test_probe_duration_missing_file(tmp_path: Path) -> None:
 
 def test_match_by_duration(tmp_path: Path) -> None:
     """When local duration matches exactly one channel video (±1s)."""
-    from aiyoutubehands.shorts_maker.media import probe_duration_seconds
 
     d = _make_folder(tmp_path, "ш7 Unique duration")
     cand = scan_folder(d)
     # Fake mp4 won't probe; inject by patching
     import aiyoutubehands.shorts_maker.matcher as matcher_mod
 
-    real_probe = matcher_mod.probe_duration_seconds if hasattr(matcher_mod, "probe_duration_seconds") else None
+    (matcher_mod.probe_duration_seconds if hasattr(matcher_mod, "probe_duration_seconds") else None)
 
     videos = [
-        VideoResource.from_api({
-            "id": "va",
-            "snippet": {"title": "raw_a", "publishedAt": "", "description": ""},
-            "status": {"privacyStatus": "private"},
-            "contentDetails": {"duration": "PT45S"},
-            "processingDetails": {"processingStatus": "succeeded"},
-        }),
-        VideoResource.from_api({
-            "id": "vb",
-            "snippet": {"title": "raw_b", "publishedAt": "", "description": ""},
-            "status": {"privacyStatus": "private"},
-            "contentDetails": {"duration": "PT30S"},
-            "processingDetails": {"processingStatus": "succeeded"},
-        }),
+        VideoResource.from_api(
+            {
+                "id": "va",
+                "snippet": {"title": "raw_a", "publishedAt": "", "description": ""},
+                "status": {"privacyStatus": "private"},
+                "contentDetails": {"duration": "PT45S"},
+                "processingDetails": {"processingStatus": "succeeded"},
+            }
+        ),
+        VideoResource.from_api(
+            {
+                "id": "vb",
+                "snippet": {"title": "raw_b", "publishedAt": "", "description": ""},
+                "status": {"privacyStatus": "private"},
+                "contentDetails": {"duration": "PT30S"},
+                "processingDetails": {"processingStatus": "succeeded"},
+            }
+        ),
     ]
 
     import aiyoutubehands.shorts_maker.media as media_mod
@@ -339,14 +360,16 @@ def test_sole_recent_video_is_not_matched_without_title_evidence(
     """
     d = _make_folder(tmp_path, "ш7 Совершенно другой ролик")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "sole1",
-        "snippet": {"title": "raw_filename_1234", "description": "", "publishedAt": ""},
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT30S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "0"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "sole1",
+            "snippet": {"title": "raw_filename_1234", "description": "", "publishedAt": ""},
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT30S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "0"},
+        }
+    )
 
     import aiyoutubehands.shorts_maker.media as media_mod
 
@@ -375,18 +398,20 @@ def test_apply_plan_dry_run(tmp_path: Path) -> None:
         hashtags="#a #b #c",
     )
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid_dry",
-        "snippet": {
-            "title": "Почему люди завидуют?",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid_dry",
+            "snippet": {
+                "title": "Почему люди завидуют?",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     matches = match_candidates([cand], [video])
     quota = QuotaEngine(db_path=tmp_path / "q.db")
     plan = build_plan(matches, root_path=tmp_path, quota=quota)
@@ -416,10 +441,10 @@ def test_marker_survives_description_truncation(tmp_path: Path) -> None:
     символов, поэтому при длинном описании маркер исчезал с живого видео —
     ролик терял признак «уже обработан» и мог быть переобработан повторно.
     """
+    from aiyoutubehands.quota import QuotaEngine
     from aiyoutubehands.shorts_maker.ledger import MARKER, ProcessedLedger
     from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
     from aiyoutubehands.shorts_maker.processor import apply_plan
-    from aiyoutubehands.quota import QuotaEngine
 
     captured: list = []
 
@@ -433,18 +458,20 @@ def test_marker_survives_description_truncation(tmp_path: Path) -> None:
 
     d = _make_folder(tmp_path, "ш1 Длинное описание")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid_long",
-        "snippet": {
-            "title": "Длинное описание",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid_long",
+            "snippet": {
+                "title": "Длинное описание",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     item = PlanItem(
         index=0,
         folder=cand,
@@ -504,18 +531,20 @@ def test_scheduling_does_not_force_made_for_kids_false(tmp_path: Path) -> None:
 
     d = _make_folder(tmp_path, "ш1 Расписание")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid_sched",
-        "snippet": {
-            "title": "Расписание",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid_sched",
+            "snippet": {
+                "title": "Расписание",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     item = PlanItem(
         index=0,
         folder=cand,
@@ -577,18 +606,20 @@ def test_publish_at_rejection_is_reported_and_counted(tmp_path: Path) -> None:
 
     d = _make_folder(tmp_path, "ш1 Расписание")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid_pa",
-        "snippet": {
-            "title": "Расписание",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid_pa",
+            "snippet": {
+                "title": "Расписание",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     item = PlanItem(
         index=0,
         folder=cand,
@@ -627,32 +658,36 @@ def test_publish_at_rejection_is_reported_and_counted(tmp_path: Path) -> None:
 
 
 def test_is_already_styled_with_playlist() -> None:
-    v = VideoResource.from_api({
-        "id": "inpl",
-        "snippet": {
-            "title": "A proper long enough title here",
-            "description": "short",
-            "tags": ["a"],
-            "thumbnails": {},
-        },
-        "status": {"privacyStatus": "private"},
-    })
+    v = VideoResource.from_api(
+        {
+            "id": "inpl",
+            "snippet": {
+                "title": "A proper long enough title here",
+                "description": "short",
+                "tags": ["a"],
+                "thumbnails": {},
+            },
+            "status": {"privacyStatus": "private"},
+        }
+    )
     # Without playlist: only 1 signal (title) → not styled
     assert is_already_styled(v) is False
     # With playlist membership + title + ... need ≥3
     # title (1) + playlist (1) = 2 → still False
     assert is_already_styled(v, in_playlist_ids={"inpl"}) is False
     # Add description length
-    v2 = VideoResource.from_api({
-        "id": "inpl2",
-        "snippet": {
-            "title": "A proper long enough title here",
-            "description": "x" * 60,
-            "tags": ["a"],
-            "thumbnails": {},
-        },
-        "status": {"privacyStatus": "private"},
-    })
+    v2 = VideoResource.from_api(
+        {
+            "id": "inpl2",
+            "snippet": {
+                "title": "A proper long enough title here",
+                "description": "x" * 60,
+                "tags": ["a"],
+                "thumbnails": {},
+            },
+            "status": {"privacyStatus": "private"},
+        }
+    )
     # title + desc + playlist = 3
     assert is_already_styled(v2, in_playlist_ids={"inpl2"}) is True
 
@@ -688,20 +723,22 @@ def test_full_pipeline_dry_run(tmp_path: Path) -> None:
     assert len(candidates) == 2
     assert any(c.should_skip for c in candidates)
 
-    video = VideoResource.from_api({
-        "id": "pipe1",
-        "snippet": {
-            "title": "Почему люди завидуют?",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-            "tags": [],
-            "thumbnails": {},
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT42S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "pipe1",
+            "snippet": {
+                "title": "Почему люди завидуют?",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+                "tags": [],
+                "thumbnails": {},
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT42S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     matches = match_candidates(candidates, [video])
     actionable = [m for m in matches if m.reason == "ok"]
     assert len(actionable) == 1
@@ -716,7 +753,11 @@ def test_full_pipeline_dry_run(tmp_path: Path) -> None:
 
     yt = YoutubeService(HttpClient(access_token="fake"), quota, expected_channel_id="UC_test")
     report = apply_plan(
-        plan, yt, access_token="fake", dry_run=True, yes=True,
+        plan,
+        yt,
+        access_token="fake",
+        dry_run=True,
+        yes=True,
         ledger=ProcessedLedger(db_path=tmp_path / "p.db"),
     )
     assert report.ok == ["pipe1"]
@@ -737,18 +778,20 @@ def test_publish_at_retry_only_on_publishat_error(tmp_path: Path) -> None:
         hashtags="#a #b #c",
     )
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "vid_err",
-        "snippet": {
-            "title": "Retry test title long",
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT40S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "vid_err",
+            "snippet": {
+                "title": "Retry test title long",
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT40S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+        }
+    )
     matches = match_candidates([cand], [video])
     plan = build_plan(matches, root_path=tmp_path, quota=QuotaEngine(db_path=tmp_path / "q.db"))
     assert plan.actionable_items()
@@ -760,7 +803,11 @@ def test_publish_at_retry_only_on_publishat_error(tmp_path: Path) -> None:
     yt = BoomYT(HttpClient(access_token="fake"), QuotaEngine(db_path=tmp_path / "q2.db"), "UC_test")
     try:
         apply_plan(
-            plan, yt, access_token="fake", dry_run=False, yes=True,
+            plan,
+            yt,
+            access_token="fake",
+            dry_run=False,
+            yes=True,
             ledger=ProcessedLedger(db_path=tmp_path / "p.db"),
         )
         raise AssertionError("expected ClientError")
@@ -772,20 +819,22 @@ def test_folder_duplicates_skip_both(tmp_path: Path) -> None:
     root = tmp_path / "sm"
     root.mkdir()
     _make_folder(root, "ш1 Один title")
-    _make_folder(root, "ш2 Один title")  # same clean title after prefix strip? 
-    # clean titles: "Один title" and "Один title" 
+    _make_folder(root, "ш2 Один title")  # same clean title after prefix strip?
+    # clean titles: "Один title" and "Один title"
     cands = scan_root(root)
     # Force same clean_title
     for c in cands:
         c.clean_title = "Один title"
-    video = VideoResource.from_api({
-        "id": "only1",
-        "snippet": {"title": "Один title", "description": "", "publishedAt": ""},
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT30S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "0"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "only1",
+            "snippet": {"title": "Один title", "description": "", "publishedAt": ""},
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT30S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "0"},
+        }
+    )
     results = match_candidates(cands, [video])
     # Both should be skipped as folder duplicates
     assert all("дубликат" in r.reason for r in results)
@@ -796,20 +845,24 @@ def test_ambiguous_title_lists_ids(tmp_path: Path) -> None:
     d = _make_folder(tmp_path, "ш1 Shared")
     cand = scan_folder(d)
     cand.clean_title = "Shared"
-    v1 = VideoResource.from_api({
-        "id": "idAAA11111",
-        "snippet": {"title": "Shared", "description": "", "publishedAt": ""},
-        "status": {"privacyStatus": "private"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "0"},
-    })
-    v2 = VideoResource.from_api({
-        "id": "idBBB22222",
-        "snippet": {"title": "Shared", "description": "", "publishedAt": ""},
-        "status": {"privacyStatus": "private"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "0"},
-    })
+    v1 = VideoResource.from_api(
+        {
+            "id": "idAAA11111",
+            "snippet": {"title": "Shared", "description": "", "publishedAt": ""},
+            "status": {"privacyStatus": "private"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "0"},
+        }
+    )
+    v2 = VideoResource.from_api(
+        {
+            "id": "idBBB22222",
+            "snippet": {"title": "Shared", "description": "", "publishedAt": ""},
+            "status": {"privacyStatus": "private"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "0"},
+        }
+    )
     results = match_candidates([cand], [v1, v2])
     assert results[0].video is None
     assert "неоднознач" in results[0].reason
@@ -820,36 +873,44 @@ def test_ambiguous_title_lists_ids(tmp_path: Path) -> None:
 def test_public_with_views_skipped(tmp_path: Path) -> None:
     d = _make_folder(tmp_path, "ш1 Почему люди завидуют?")
     cand = scan_folder(d)
-    video = VideoResource.from_api({
-        "id": "pub1",
-        "snippet": {
-            "title": "Почему люди завидуют?",
-            "description": "",
-            "publishedAt": "2026-01-01T00:00:00Z",
-        },
-        "status": {"privacyStatus": "public"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "12"},
-    })
+    video = VideoResource.from_api(
+        {
+            "id": "pub1",
+            "snippet": {
+                "title": "Почему люди завидуют?",
+                "description": "",
+                "publishedAt": "2026-01-01T00:00:00Z",
+            },
+            "status": {"privacyStatus": "public"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "12"},
+        }
+    )
     results = match_candidates([cand], [video])
     assert results[0].reason != "ok"
-    assert "просмотры" in results[0].reason or "public" in results[0].reason or "privacy" in results[0].reason
+    assert (
+        "просмотры" in results[0].reason
+        or "public" in results[0].reason
+        or "privacy" in results[0].reason
+    )
 
 
 def _mk_video(vid: str, title: str) -> VideoResource:
-    return VideoResource.from_api({
-        "id": vid,
-        "snippet": {
-            "title": title,
-            "description": "",
-            "publishedAt": "",
-            "channelId": "UC_test",
-        },
-        "status": {"privacyStatus": "private"},
-        "contentDetails": {"duration": "PT30S"},
-        "processingDetails": {"processingStatus": "succeeded"},
-        "statistics": {"viewCount": "0"},
-    })
+    return VideoResource.from_api(
+        {
+            "id": vid,
+            "snippet": {
+                "title": title,
+                "description": "",
+                "publishedAt": "",
+                "channelId": "UC_test",
+            },
+            "status": {"privacyStatus": "private"},
+            "contentDetails": {"duration": "PT30S"},
+            "processingDetails": {"processingStatus": "succeeded"},
+            "statistics": {"viewCount": "0"},
+        }
+    )
 
 
 def test_plan_fingerprint_tracks_actionable_content(tmp_path: Path) -> None:

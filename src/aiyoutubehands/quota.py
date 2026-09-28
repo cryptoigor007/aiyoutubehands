@@ -58,9 +58,7 @@ class QuotaLedger:
                 )
                 """
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_ledger_day ON ledger(day)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ledger_day ON ledger(day)")
 
     @staticmethod
     def _today() -> str:

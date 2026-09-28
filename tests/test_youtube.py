@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from aiyoutubehands.client import HttpClient
 from aiyoutubehands.models.youtube import VideoSnippet
 from aiyoutubehands.quota import QuotaEngine
-from aiyoutubehands.youtube import YoutubeService, COST
+from aiyoutubehands.youtube import COST, YoutubeService
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_get_my_channel_dry_run(tmp_path: Path) -> None:
@@ -45,6 +48,7 @@ def test_claims_unsupported(tmp_path: Path) -> None:
 def test_update_requires_yes(tmp_path: Path) -> None:
     from aiyoutubehands.client import ClientError
     from aiyoutubehands.models.youtube import VideoSnippet
+
     client = HttpClient()
     quota = QuotaEngine(db_path=tmp_path / "q.db")
     yt = YoutubeService(client, quota, expected_channel_id="UC_test")
@@ -234,11 +238,7 @@ def test_list_playlists_follows_pagination(tmp_path: Path, monkeypatch) -> None:
             ],
             "nextPageToken": "T2",
         },
-        {
-            "items": [
-                {"id": "PL2", "snippet": {"title": "B"}, "contentDetails": {"itemCount": "2"}}
-            ]
-        },
+        {"items": [{"id": "PL2", "snippet": {"title": "B"}, "contentDetails": {"itemCount": "2"}}]},
     ]
     seen_params: list[dict] = []
 

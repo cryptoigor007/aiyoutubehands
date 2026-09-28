@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import calendar as calmod
-
-calmod.setfirstweekday(calmod.MONDAY)
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,8 +14,19 @@ log = get_logger(__name__)
 
 # Russian month names for user-facing grid
 _MONTHS_RU = [
-    "", "Янв", "Фев", "Мар", "Апр", "Май", "Июн",
-    "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек",
+    "",
+    "Янв",
+    "Фев",
+    "Мар",
+    "Апр",
+    "Май",
+    "Июн",
+    "Июл",
+    "Авг",
+    "Сен",
+    "Окт",
+    "Ноя",
+    "Дек",
 ]
 
 
@@ -83,9 +92,7 @@ class Calendar:
 
     def get(self, video_id: str) -> CalendarEntry | None:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM entries WHERE video_id = ?", (video_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM entries WHERE video_id = ?", (video_id,)).fetchone()
         return CalendarEntry.from_row(row) if row else None
 
     def list_entries(self, status: str | None = None) -> list[CalendarEntry]:
@@ -96,9 +103,7 @@ class Calendar:
                     (status,),
                 ).fetchall()
             else:
-                rows = conn.execute(
-                    "SELECT * FROM entries ORDER BY publish_at"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM entries ORDER BY publish_at").fetchall()
         return [CalendarEntry.from_row(r) for r in rows]
 
     def update_status(self, video_id: str, status: str) -> None:
@@ -130,7 +135,9 @@ class Calendar:
 
         month_name = _MONTHS_RU[month] if 1 <= month <= 12 else str(month)
         lines = [f"  {month_name} {year}", "Пн Вт Ср Чт Пт Сб Вс"]
-        weeks = calmod.monthcalendar(year, month)
+        # Не меняем глобальное состояние модуля calendar: неделя с понедельника
+        # задаётся локальным Calendar, иначе импорт библиотеки влиял бы на весь процесс.
+        weeks = calmod.Calendar(firstweekday=calmod.MONDAY).monthdayscalendar(year, month)
         for week in weeks:
             cells = []
             for day in week:

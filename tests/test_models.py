@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from aiyoutubehands.models.youtube import (
+    ChannelResource,
+    VideoResource,
     VideoSnippet,
     VideoStatus,
-    VideoResource,
-    ChannelResource,
-    PlaylistResource,
 )
 
 
@@ -64,20 +63,33 @@ def test_video_resource_from_api() -> None:
 
 
 def test_channel_resource() -> None:
-    raw = {"id": "UC_x", "snippet": {"title": "My Channel"}, "statistics": {"subscriberCount": "10"}}
+    raw = {
+        "id": "UC_x",
+        "snippet": {"title": "My Channel"},
+        "statistics": {"subscriberCount": "10"},
+    }
     c = ChannelResource.from_api(raw)
     assert c.id == "UC_x"
     assert c.title == "My Channel"
 
 
 def test_comment_and_caption() -> None:
-    from aiyoutubehands.models.youtube import CommentResource, CaptionResource
-    c = CommentResource.from_api({
-        "id": "c1",
-        "snippet": {"topLevelComment": {"snippet": {"authorDisplayName": "A", "textOriginal": "Hi", "videoId": "v"}}},
-    })
+    from aiyoutubehands.models.youtube import CaptionResource, CommentResource
+
+    c = CommentResource.from_api(
+        {
+            "id": "c1",
+            "snippet": {
+                "topLevelComment": {
+                    "snippet": {"authorDisplayName": "A", "textOriginal": "Hi", "videoId": "v"}
+                }
+            },
+        }
+    )
     assert c.author == "A"
-    cap = CaptionResource.from_api({"id": "x", "snippet": {"videoId": "v", "language": "ru", "name": "RU"}})
+    cap = CaptionResource.from_api(
+        {"id": "x", "snippet": {"videoId": "v", "language": "ru", "name": "RU"}}
+    )
     assert cap.language == "ru"
 
 
@@ -116,24 +128,28 @@ def test_video_is_short_and_never_published() -> None:
 
 
 def test_has_custom_thumbnail() -> None:
-    v = VideoResource.from_api({
-        "id": "t1",
-        "snippet": {
-            "title": "T",
-            "thumbnails": {
-                "maxres": {"url": "https://example.com/max.jpg", "width": 1280, "height": 720}
+    v = VideoResource.from_api(
+        {
+            "id": "t1",
+            "snippet": {
+                "title": "T",
+                "thumbnails": {
+                    "maxres": {"url": "https://example.com/max.jpg", "width": 1280, "height": 720}
+                },
             },
-        },
-    })
+        }
+    )
     assert v.has_custom_thumbnail() is True
 
-    v2 = VideoResource.from_api({
-        "id": "t2",
-        "snippet": {
-            "title": "T",
-            "thumbnails": {
-                "default": {"url": "https://example.com/d.jpg", "width": 120, "height": 90}
+    v2 = VideoResource.from_api(
+        {
+            "id": "t2",
+            "snippet": {
+                "title": "T",
+                "thumbnails": {
+                    "default": {"url": "https://example.com/d.jpg", "width": 120, "height": 90}
+                },
             },
-        },
-    })
+        }
+    )
     assert v2.has_custom_thumbnail() is False

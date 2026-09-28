@@ -5,13 +5,15 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.models.youtube import VideoSnippet, VideoStatus
-from aiyoutubehands.quota import QuotaEngine
+
+if TYPE_CHECKING:
+    from aiyoutubehands.quota import QuotaEngine
 
 log = get_logger(__name__)
 

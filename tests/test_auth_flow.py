@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -10,12 +10,15 @@ import pytest
 from aiyoutubehands.auth_flow import (
     SCOPES,
     AuthFlowError,
+    desktop_authorization_url,
     device_flow_poll_stub,
     device_flow_start_stub,
-    desktop_authorization_url,
     load_client_secrets,
 )
 from aiyoutubehands.token import EncryptedJsonStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_device_flow_stub() -> None:

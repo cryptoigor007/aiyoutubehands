@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
 from aiyoutubehands.commands.connect_cmd import _find_downloaded_oauth_file
 from aiyoutubehands.main import cli
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_connect_configures_and_removes_source(tmp_path: Path, monkeypatch) -> None:
