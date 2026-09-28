@@ -237,6 +237,12 @@ def register(cli: click.Group) -> None:
         help="Обрабатывать папки с маркером ПЕРЕДЕЛАТЬ. Обязан совпадать с analyze, "
         "иначе хэш плана не сойдётся и применение откажет.",
     )
+    @click.option(
+        "--no-marker",
+        is_flag=True,
+        help="Не писать служебный #ayh_processed в описание. Маркер виден зрителю; "
+        "от повторной обработки защищают локальный реестр и признаки «уже оформлено».",
+    )
     def process_apply(
         confirm: str,
         root_path: Path,
@@ -247,6 +253,7 @@ def register(cli: click.Group) -> None:
         allow_ai: bool,
         plan_file: Path | None,
         ignore_markers: bool,
+        no_marker: bool,
     ) -> None:
         """Применить план после точного подтверждения."""
         from datetime import datetime
@@ -365,6 +372,7 @@ def register(cli: click.Group) -> None:
                 dry_run=dry_run,
                 yes=yes or dry_run,
                 ledger=ledger,
+                mark_processed=not no_marker,
             )
             click.echo(report.summary())
             click.echo(

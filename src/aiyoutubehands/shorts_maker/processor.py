@@ -68,8 +68,14 @@ def apply_plan(
     dry_run: bool = True,
     yes: bool = False,
     ledger: ProcessedLedger | None = None,
+    mark_processed: bool = True,
 ) -> ProcessReport:
-    """Apply actionable items. Stops on first 403/429."""
+    """Apply actionable items. Stops on first 403/429.
+
+    ``mark_processed=False`` не пишет служебный ``#ayh_processed`` в описание:
+    маркер виден зрителю, а от повторной обработки защищают локальный реестр
+    и признаки «уже оформлено».
+    """
     report = ProcessReport()
     log_path = _run_log_path()
     report.log_path = log_path
@@ -101,6 +107,7 @@ def apply_plan(
                 yes=yes,
                 ledger=ledger,
                 run_id=run_id,
+                mark_processed=mark_processed,
             )
             report.ok.append(vid)
             report.quota_spent += spent
@@ -146,6 +153,7 @@ def _apply_one(
     yes: bool,
     ledger: ProcessedLedger,
     run_id: str,
+    mark_processed: bool = True,
 ) -> tuple[int, list[str]]:
     """Returns (quota units spent, notes about degradations for the report)."""
     if item.video is None:
@@ -156,8 +164,12 @@ def _apply_one(
 
     # Маркер добавляется В КОНЕЦ, поэтому место под него резервируется ДО обрезки.
     # Иначе при длинном описании он срезался вместе с хвостом и исчезал с видео.
-    body = (item.new_description or "")[: MAX_DESCRIPTION - len(MARKER) - 2]
-    desc = ProcessedLedger.append_marker(body)
+    if mark_processed:
+        body = (item.new_description or "")[: MAX_DESCRIPTION - len(MARKER) - 2]
+        desc = ProcessedLedger.append_marker(body)
+    else:
+        # Без маркера резервировать место не нужно — описание уходит как есть.
+        desc = (item.new_description or "")[:MAX_DESCRIPTION]
 
     snippet = VideoSnippet(
         title=item.new_title[:100],
