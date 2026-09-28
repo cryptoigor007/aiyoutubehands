@@ -11,7 +11,7 @@ from aiyoutubehands.client import ClientError
 from aiyoutubehands.logging import get_logger
 from aiyoutubehands.models.youtube import VideoSnippet, VideoStatus
 from aiyoutubehands.quota import QuotaEngine
-from aiyoutubehands.shorts_maker.ledger import ProcessedLedger
+from aiyoutubehands.shorts_maker.ledger import MARKER, ProcessedLedger
 from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
 from aiyoutubehands.youtube import YoutubeService
 
@@ -19,6 +19,7 @@ log = get_logger(__name__)
 
 MSK = ZoneInfo("Europe/Moscow")
 PAUSE_SEC = 0.75  # ban-safe gap between writes
+MAX_DESCRIPTION = 5000  # жёсткий лимит YouTube для snippet.description
 
 
 def _run_log_path() -> Path:
@@ -146,12 +147,14 @@ def _apply_one(
     vid = item.video.id
     spent = 0
 
-    # Build description with marker
-    desc = ProcessedLedger.append_marker(item.new_description)
+    # Маркер добавляется В КОНЕЦ, поэтому место под него резервируется ДО обрезки.
+    # Иначе при длинном описании он срезался вместе с хвостом и исчезал с видео.
+    body = (item.new_description or "")[: MAX_DESCRIPTION - len(MARKER) - 2]
+    desc = ProcessedLedger.append_marker(body)
 
     snippet = VideoSnippet(
         title=item.new_title[:100],
-        description=desc[:5000],
+        description=desc[:MAX_DESCRIPTION],
         tags=item.new_tags,
         category_id="22",
         channel_id=item.video.snippet.channel_id,

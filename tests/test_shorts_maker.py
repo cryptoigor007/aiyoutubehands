@@ -409,6 +409,78 @@ def test_apply_plan_dry_run(tmp_path: Path) -> None:
     assert report.log_path is not None
 
 
+def test_marker_survives_description_truncation(tmp_path: Path) -> None:
+    """#ayh_processed обязан остаться в описании при упоре в лимит 5000.
+
+    Регресс: маркер добавлялся в конец, а затем описание обрезалось до 5000
+    символов, поэтому при длинном описании маркер исчезал с живого видео —
+    ролик терял признак «уже обработан» и мог быть переобработан повторно.
+    """
+    from aiyoutubehands.shorts_maker.ledger import MARKER, ProcessedLedger
+    from aiyoutubehands.shorts_maker.plan import PlanItem, ProcessPlan
+    from aiyoutubehands.shorts_maker.processor import apply_plan
+    from aiyoutubehands.quota import QuotaEngine
+
+    captured: list = []
+
+    class _CapturingYT:
+        def __init__(self) -> None:
+            self.quota = QuotaEngine(db_path=tmp_path / "q.db")
+
+        def update_video(self, vid, *, snippet=None, status=None, dry_run=False, yes=False):
+            captured.append(snippet)
+            return None
+
+    d = _make_folder(tmp_path, "ш1 Длинное описание")
+    cand = scan_folder(d)
+    video = VideoResource.from_api({
+        "id": "vid_long",
+        "snippet": {
+            "title": "Длинное описание",
+            "description": "",
+            "publishedAt": "",
+            "channelId": "UC_test",
+        },
+        "status": {"privacyStatus": "private"},
+        "contentDetails": {"duration": "PT40S"},
+        "processingDetails": {"processingStatus": "succeeded"},
+    })
+    item = PlanItem(
+        index=0,
+        folder=cand,
+        video=video,
+        match_method="title",
+        new_title="Длинное описание",
+        new_description="т" * 4999,
+        new_tags=["a"],
+        thumbnail_path=None,
+        publish_at=None,
+        status="к обработке",
+        estimated_quota=50,
+    )
+    plan = ProcessPlan(
+        created_at=datetime.now(MSK),
+        root_path=tmp_path,
+        items=[item],
+        quota_projection={},
+        confirm_phrase="подтверждаю план от 01.01.2026",
+    )
+
+    apply_plan(
+        plan,
+        _CapturingYT(),
+        access_token="fake",
+        dry_run=True,
+        yes=True,
+        ledger=ProcessedLedger(db_path=tmp_path / "p.db"),
+    )
+
+    assert len(captured) == 1
+    sent = captured[0].description
+    assert MARKER in sent
+    assert len(sent) <= 5000
+
+
 def test_is_already_styled_with_playlist() -> None:
     v = VideoResource.from_api({
         "id": "inpl",
