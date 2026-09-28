@@ -36,6 +36,7 @@ class FolderCandidate:
     transcript_json: Path | None = None
     markers: set[str] = field(default_factory=set)
     video_id_hint: str | None = None  # from НУЖНО РАЗОБРАТЬСЯ.txt
+    prefix_number: str | None = None  # номер «шN» из имени папки
     prefix_mismatch: bool = False
     skip_reason: str | None = None
 
@@ -79,8 +80,13 @@ def _read_video_id_hint(path: Path) -> str | None:
     return m.group(1) if m else None
 
 
-def scan_folder(folder: Path) -> FolderCandidate:
-    """Inspect a single Shorts Maker subfolder."""
+def scan_folder(folder: Path, *, ignore_markers: bool = False) -> FolderCandidate:
+    """Inspect a single Shorts Maker subfolder.
+
+    ``ignore_markers=True`` обрабатывает папки с маркером ПЕРЕДЕЛАТЬ, потому что
+    автоаудит звука бывает ложным. Маркер при этом остаётся в ``cand.markers``
+    для отчёта. Маркер НУЖНО РАЗОБРАТЬСЯ не обходится никогда.
+    """
     folder = folder.resolve()
     name = folder.name
     clean = clean_folder_title(name)
@@ -103,7 +109,7 @@ def scan_folder(folder: Path) -> FolderCandidate:
             if hint:
                 cand.video_id_hint = hint
 
-    if MARKER_PEREDELAT in cand.markers:
+    if MARKER_PEREDELAT in cand.markers and not ignore_markers:
         cand.skip_reason = "маркер ПЕРЕДЕЛАТЬ"
         return cand
     if MARKER_RAZOBRATSYA in cand.markers:
@@ -131,6 +137,7 @@ def scan_folder(folder: Path) -> FolderCandidate:
 
     # Prefix consistency: folder «ш5 …» vs files «ш35_…»
     folder_num = _extract_prefix_number(name)
+    cand.prefix_number = folder_num
     if folder_num and cand.video_file:
         file_num = _extract_prefix_number(cand.video_file.stem)
         if file_num and file_num != folder_num:
@@ -151,7 +158,7 @@ def scan_folder(folder: Path) -> FolderCandidate:
     return cand
 
 
-def scan_root(root: Path | str) -> list[FolderCandidate]:
+def scan_root(root: Path | str, *, ignore_markers: bool = False) -> list[FolderCandidate]:
     """Scan all immediate subfolders of Shorts Maker root."""
     root_path = Path(root).expanduser().resolve()
     if not root_path.is_dir():
@@ -163,7 +170,7 @@ def scan_root(root: Path | str) -> list[FolderCandidate]:
             continue
         if child.name.startswith("."):
             continue
-        cand = scan_folder(child)
+        cand = scan_folder(child, ignore_markers=ignore_markers)
         candidates.append(cand)
         log.info(
             "folder_scanned",

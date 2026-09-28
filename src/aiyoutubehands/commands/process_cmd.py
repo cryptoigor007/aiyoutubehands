@@ -102,6 +102,13 @@ def register(cli: click.Group) -> None:
         is_flag=True,
         help="Если нет description/tags — сгенерировать через ayh ai (local stub)",
     )
+    @click.option(
+        "--ignore-markers",
+        is_flag=True,
+        help="Обрабатывать папки с маркером ПЕРЕДЕЛАТЬ. Аудит звука бывает ложным "
+        "(например, clipping при flat factor = 0); решение принимает автор. "
+        "Маркер НУЖНО РАЗОБРАТЬСЯ не обходится никогда.",
+    )
     def process_analyze(
         root_path: Path | None,
         days: int,
@@ -110,6 +117,7 @@ def register(cli: click.Group) -> None:
         save_plan: Path | None,
         playlist: str | None,
         allow_ai: bool,
+        ignore_markers: bool,
     ) -> None:
         """Сканировать папку Shorts Maker, сопоставить с каналом, показать план."""
         if root_path is None:
@@ -121,7 +129,10 @@ def register(cli: click.Group) -> None:
         passphrase = require_passphrase(None)
 
         from aiyoutubehands.service_factory import build_youtube_service
-        from aiyoutubehands.shorts_maker.folder_scanner import scan_root
+        from aiyoutubehands.shorts_maker.folder_scanner import (
+            MARKER_PEREDELAT,
+            scan_root,
+        )
         from aiyoutubehands.shorts_maker.ledger import ProcessedLedger
         from aiyoutubehands.shorts_maker.matcher import match_candidates
         from aiyoutubehands.shorts_maker.plan import build_plan, render_plan_table
@@ -129,8 +140,15 @@ def register(cli: click.Group) -> None:
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
             click.echo(f"Сканирую {root_path} …")
-            candidates = scan_root(root_path)
+            candidates = scan_root(root_path, ignore_markers=ignore_markers)
             click.echo(f"Найдено подпапок: {len(candidates)}")
+            if ignore_markers:
+                ignored = sum(1 for c in candidates if MARKER_PEREDELAT in c.markers)
+                if ignored:
+                    click.echo(
+                        f"⚠ --ignore-markers: маркер ПЕРЕДЕЛАТЬ проигнорирован "
+                        f"у {ignored} папок по решению автора"
+                    )
 
             if dry_run:
                 click.echo(

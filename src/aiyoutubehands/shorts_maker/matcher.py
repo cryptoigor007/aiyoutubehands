@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -29,6 +30,19 @@ class MatchResult:
     related_video_ids: list[str] = field(default_factory=list)
 
 
+_RAW_PIPELINE_NAME_RE = re.compile(r"^[Шш]\s*(\d+)\b")
+
+
+def is_raw_pipeline_name(title: str) -> bool:
+    """«Ш43 …», «ш43 … final» — рабочее имя из пайплайна, а не оформленный заголовок.
+
+    Ролик, только что загруженный Shorts Maker, называется именно так.
+    Считать такое имя признаком оформления — значит отказываться обрабатывать
+    ровно те ролики, которые ждут оформления.
+    """
+    return bool(_RAW_PIPELINE_NAME_RE.match((title or "").strip()))
+
+
 def is_already_styled(
     video: VideoResource,
     *,
@@ -40,8 +54,10 @@ def is_already_styled(
 
     signals = 0
     title = video.snippet.title or ""
-    filename_like = (" " not in title.strip() and len(title) <= 40) or title.endswith(
-        (".mp4", ".mov", ".mkv")
+    filename_like = (
+        (" " not in title.strip() and len(title) <= 40)
+        or title.endswith((".mp4", ".mov", ".mkv"))
+        or is_raw_pipeline_name(title)
     )
     if len(title) > 15 and not filename_like:
         signals += 1
@@ -58,6 +74,19 @@ def is_already_styled(
 
 def _normalize_title(s: str) -> str:
     return " ".join((s or "").strip().lower().split())
+
+
+def _raw_prefix_key(text: str) -> str | None:
+    """Нормализованный номер «шN» — принимает и название ролика, и чистое число."""
+    s = (text or "").strip()
+    if not s:
+        return None
+    if s.isdigit():
+        return str(int(s))
+    m = _RAW_PIPELINE_NAME_RE.match(s)
+    if not m:
+        return None
+    return str(int(m.group(1)))
 
 
 def _view_count(video: VideoResource) -> int:
@@ -121,6 +150,13 @@ def match_candidates(
         if key:
             by_title.setdefault(key, []).append(v)
 
+    # Номер «шN» из названия ролика — точный идентификатор загруженного пайплайном видео
+    by_prefix: dict[str, list[VideoResource]] = {}
+    for v in videos:
+        pkey = _raw_prefix_key(v.snippet.title or "")
+        if pkey:
+            by_prefix.setdefault(pkey, []).append(v)
+
     dup_groups = find_folder_duplicate_groups(candidates)
     # map folder path → sibling folder names
     folder_dup_peers: dict[str, list[str]] = {}
@@ -157,8 +193,34 @@ def match_candidates(
         reason = ""
         related_vids: list[str] = []
 
+        # a0) Точный номер «шN»: он есть и в имени папки, и в названии ролика.
+        # Это самый надёжный признак для роликов, только что загруженных пайплайном.
+        prefix_key = _raw_prefix_key(cand.prefix_number or "")
+        if prefix_key:
+            free = [v for v in by_prefix.get(prefix_key, []) if v.id not in used_ids]
+            if len(free) == 1:
+                matched = free[0]
+                method = "prefix"
+                # reason остаётся пустым → в плане это "ok" (к обработке);
+                # способ сопоставления виден в поле method
+                reason = ""
+            elif len(free) > 1:
+                related_vids = [v.id for v in free]
+                results.append(
+                    MatchResult(
+                        candidate=cand,
+                        video=None,
+                        method="none",
+                        reason=f"неоднозначный номер ш{prefix_key}: несколько роликов",
+                        notes=dup_note or f"video_ids={','.join(related_vids[:8])}",
+                        related_folders=peers,
+                        related_video_ids=related_vids,
+                    )
+                )
+                continue
+
         # a) Exact cleaned title match — require unique free candidate
-        if title_key and title_key in by_title:
+        if matched is None and title_key and title_key in by_title:
             free = [v for v in by_title[title_key] if v.id not in used_ids]
             if len(free) == 1:
                 matched = free[0]
