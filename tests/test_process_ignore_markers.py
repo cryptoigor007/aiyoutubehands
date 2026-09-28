@@ -126,3 +126,15 @@ def test_cli_analyze_accepts_ignore_markers(tmp_path: Path, monkeypatch) -> None
     assert result.exit_code == 0, result.output
     assert "пропуск: маркер ПЕРЕДЕЛАТЬ" not in result.output, "папка не должна пропускаться"
     assert "проигнорирован" in result.output, "должно быть явное предупреждение"
+
+
+def test_apply_has_ignore_markers_option() -> None:
+    """У apply обязан быть тот же флаг, что у analyze.
+
+    Без него apply пересобирает план уже с пропуском помеченных папок,
+    хэш не сходится с подтверждённой фразой — и применение отказывает.
+    """
+    result = CliRunner().invoke(cli, ["process", "apply", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--ignore-markers" in result.output

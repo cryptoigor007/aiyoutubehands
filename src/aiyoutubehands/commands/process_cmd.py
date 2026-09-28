@@ -231,6 +231,12 @@ def register(cli: click.Group) -> None:
         default=None,
         help="Файл analyze --save-plan для сверки: применится только он",
     )
+    @click.option(
+        "--ignore-markers",
+        is_flag=True,
+        help="Обрабатывать папки с маркером ПЕРЕДЕЛАТЬ. Обязан совпадать с analyze, "
+        "иначе хэш плана не сойдётся и применение откажет.",
+    )
     def process_apply(
         confirm: str,
         root_path: Path,
@@ -240,6 +246,7 @@ def register(cli: click.Group) -> None:
         playlist: str | None,
         allow_ai: bool,
         plan_file: Path | None,
+        ignore_markers: bool,
     ) -> None:
         """Применить план после точного подтверждения."""
         from datetime import datetime
@@ -289,7 +296,7 @@ def register(cli: click.Group) -> None:
         passphrase = require_passphrase(None)
         yt, client = build_youtube_service(passphrase=passphrase)
         try:
-            candidates = scan_root(root_path)
+            candidates = scan_root(root_path, ignore_markers=ignore_markers)
             if dry_run:
                 videos: list[Any] = []
             else:
