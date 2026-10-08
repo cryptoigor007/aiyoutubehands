@@ -160,6 +160,8 @@ def test_create_post_js_cyrillic_and_structure() -> None:
     assert "previewCoordinates" in js
     assert "SAPISIDHASH" in js
     assert "SAPISID3PHASH" in js
+    assert "USER_SESSION_ID" in js
+    assert "_u SAPISID3PHASH" in js
     assert "buildAuth" in js
     assert "x-goog-authuser" in js
     assert "x-goog-visitor-id" in js

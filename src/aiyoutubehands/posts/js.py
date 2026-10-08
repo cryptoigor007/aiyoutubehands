@@ -288,12 +288,18 @@ def build_create_post_js(
     Mirrors the captured web-client request (08.10.2026): sends
     ``x-goog-authuser`` (``SESSION_INDEX``), ``x-goog-visitor-id``
     (``VISITOR_DATA``), ``x-youtube-bootstrap-logged-in`` and an
-    ``authorization`` header computed up-front from the JS-readable
-    ``__Secure-3PAPISID`` cookie
-    (``SAPISIDHASH <ts>_<sha1>_u SAPISID3PHASH <ts>_<sha1>_u`` — the captured
-    request carries the same hash under both names).  If the server still
-    answers 401/403, retries once **without** the authorization header
-    (cookies-only fallback).
+    ``authorization`` header computed up-front exactly like the web client
+    (reversed from the kevlar bundle):
+
+    * cookie = ``SAPISID`` or (fallback) ``__Secure-3PAPISID``;
+    * ``sha1("<USER_SESSION_ID> <ts> <cookie> https://www.youtube.com")``
+      when ``USER_SESSION_ID`` is present, otherwise ``sha1("<cookie>
+      https://www.youtube.com")``;
+    * value = ``SAPISIDHASH <ts>_<hash>_u SAPISID3PHASH <ts>_<hash>_u``
+      (or ``SAPISIDHASH <hash> SAPISID3PHASH <hash>`` without the session id).
+
+    If the server still answers 401/403, retries once **without** the
+    authorization header (cookies-only fallback).
 
     The JSON body is gzip-compressed via ``CompressionStream`` when available
     (same as the web client); falls back to a plain JSON body.
@@ -388,15 +394,21 @@ def build_create_post_js(
     return new Promise(function(resolve) {{
       try {{
         var m = document.cookie.match(/(?:^|;\\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)/);
-        var sapisid = m ? decodeURIComponent(m[1]) : "";
-        if (!sapisid || !(window.crypto && crypto.subtle)) {{ resolve(""); return; }}
+        var cookie = m ? decodeURIComponent(m[1]) : "";
+        var usid = String(cfg("USER_SESSION_ID") || "");
+        if (!cookie || !(window.crypto && crypto.subtle)) {{ resolve(""); return; }}
         var ts = Math.floor(Date.now() / 1000);
-        crypto.subtle.digest("SHA-1", new TextEncoder().encode(ts + " " + sapisid + " " + "https://www.youtube.com"))
+        var source = usid
+          ? usid + " " + ts + " " + cookie + " https://www.youtube.com"
+          : cookie + " https://www.youtube.com";
+        crypto.subtle.digest("SHA-1", new TextEncoder().encode(source))
           .then(function(hash) {{
             var hex = "";
             var b = new Uint8Array(hash);
             for (var i = 0; i < b.length; i++) {{ hex += ("0" + b[i].toString(16)).slice(-2); }}
-            resolve("SAPISIDHASH " + ts + "_" + hex + "_u SAPISID3PHASH " + ts + "_" + hex + "_u");
+            resolve(usid
+              ? "SAPISIDHASH " + ts + "_" + hex + "_u SAPISID3PHASH " + ts + "_" + hex + "_u"
+              : "SAPISIDHASH " + hex + " SAPISID3PHASH " + hex);
           }})
           .catch(function() {{ resolve(""); }});
       }} catch (e) {{ resolve(""); }}
