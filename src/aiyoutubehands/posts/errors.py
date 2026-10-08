@@ -74,10 +74,10 @@ class ImageAttachFailedError(PostsError):
             f"Не удалось прикрепить картинку: {reason}",
             code="IMAGE_ATTACH_FAILED",
             action=(
-                "Либо снимите HAR ручного выбора файла, либо включите Accessibility "
-                "для нативного пикера (System Preferences → Privacy → Accessibility)"
+                "Повторите; если повторяется — снимите свежий лог сети "
+                "(net_hooks3.js) и обновите схему запросов в posts/js.py"
             ),
-            retryable=False,
+            retryable=True,
         )
 
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aiyoutubehands.exceptions import EXIT_USAGE, AppError
+from aiyoutubehands.posts.webapi import CROP_CHOICES
 
 # Limits aligned with YouTube Studio community post rules (verified 2026)
 MAX_TEXT_CHARS = 5000
@@ -104,6 +105,14 @@ class PostPayload:
     text: str
     image: Path | None = None
     channel_id: str = ""
+    crop: str = "center"
+
+    def __post_init__(self) -> None:
+        if self.crop not in CROP_CHOICES:
+            raise PostValidationError(
+                f"crop должен быть из {', '.join(CROP_CHOICES)}",
+                action="Используйте --crop center|left|right|top|bottom",
+            )
 
     @classmethod
     def from_files(
@@ -112,10 +121,11 @@ class PostPayload:
         image: Path | str | None = None,
         *,
         channel_id: str = "",
+        crop: str = "center",
     ) -> PostPayload:
         text = validate_text_file(text_file)
         img = validate_image_path(image)
-        return cls(text=text, image=img, channel_id=channel_id)
+        return cls(text=text, image=img, channel_id=channel_id, crop=crop)
 
     def posts_url(self) -> str:
         """URL that opens the create-post dialog for the channel."""

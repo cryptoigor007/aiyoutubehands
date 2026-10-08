@@ -9,9 +9,17 @@ from aiyoutubehands.posts.js import (
     ascii_safe_js_string,
     build_check_error_banner_js,
     build_click_placeholder_js,
+    build_create_post_js,
     build_dialog_visible_js,
+    build_get_result_js,
+    build_page_ready_js,
     build_publish_click_js,
+    build_reset_result_js,
     build_type_text_js,
+    build_upload_chunk_js,
+    build_upload_finalize_js,
+    build_upload_init_js,
+    build_verify_post_js,
 )
 
 
@@ -88,3 +96,85 @@ def test_build_check_error_banner_js_cyrillic_escaped() -> None:
     # The Russian error phrase must be present only as \\u escapes
     assert "Не удалось" not in js
     assert "\\u" in js
+
+
+# ---------------------------------------------------------------------------
+# API flow builders
+# ---------------------------------------------------------------------------
+
+
+def test_ui_builders_return_json_strings() -> None:
+    """do JavaScript must return strings — objects do not survive the bridge."""
+    for js in (
+        build_click_placeholder_js(),
+        build_type_text_js("x"),
+        build_publish_click_js(),
+        build_dialog_visible_js(),
+        build_check_error_banner_js(),
+    ):
+        assert "JSON.stringify" in js
+        assert all(ord(c) < 128 for c in js)
+
+
+def test_upload_init_js_structure() -> None:
+    js = build_upload_init_js("UCtest123", 235772)
+    assert all(ord(c) < 128 for c in js)
+    assert "channel_image_upload" in js
+    assert "X-YouTube-ChannelId" in js
+    assert "X-Goog-Upload-Protocol" in js
+    assert "resumable" in js
+    assert "X-Goog-Upload-Command" in js
+    assert "235772" in js
+
+
+def test_upload_chunk_js_appends() -> None:
+    js_first = build_upload_chunk_js("QUJD", first=True)
+    js_next = build_upload_chunk_js("REVG", first=False)
+    assert "QUJD" in js_first
+    assert "__AYH_IMG_B64" in js_next
+    assert all(ord(c) < 128 for c in js_first + js_next)
+
+
+def test_upload_finalize_js_structure() -> None:
+    js = build_upload_finalize_js("UCtest", "https://www.youtube.com/x?a=1&b=2")
+    assert all(ord(c) < 128 for c in js)
+    assert "upload, finalize" in js
+    assert "encryptedBlobId" in js
+    assert "X-Goog-Upload-Offset" in js
+
+
+def test_create_post_js_cyrillic_and_structure() -> None:
+    js = build_create_post_js(
+        "ChhVQ0NY",
+        "Привет, мир",
+        {"top": 0.0, "right": 1.0, "bottom": 1.0, "left": 0.0},
+    )
+    assert all(ord(c) < 128 for c in js)
+    assert "Привет" not in js
+    assert "\\u" in js
+    assert "backstage/create_post" in js
+    assert "createBackstagePostParams" in js
+    assert "commentText" in js
+    assert "imagesAttachment" in js
+    assert "encryptedBlobId" in js
+    assert "previewCoordinates" in js
+    assert "SAPISIDHASH" in js
+    assert "CompressionStream" in js
+
+
+def test_page_ready_and_result_builders() -> None:
+    js = build_page_ready_js()
+    assert "INNERTUBE_CONTEXT" in js
+    assert all(ord(c) < 128 for c in js)
+    js2 = build_get_result_js()
+    assert "__AYH_POST_RESULT" in js2
+    js3 = build_reset_result_js()
+    assert "reset" in js3
+
+
+def test_verify_post_js_cyrillic_escaped() -> None:
+    js = build_verify_post_js("UCtest", "Одиночество — это не когда")
+    assert all(ord(c) < 128 for c in js)
+    assert "Одиночество" not in js
+    assert "\\u" in js
+    assert "/posts" in js

@@ -1,102 +1,102 @@
 # Записи (Community Posts)
 
-Публикация «Записей» на канал через веб-автоматизацию Safari (macOS).
+Публикация «Записей» на канал через Safari (macOS). Официальный YouTube Data API v3
+**не поддерживает** создание community posts — эндпоинта нет. Команда воспроизводит
+**веб-флоу из контекста страницы** (Safari + Apple Events) — так же, как это делает сам сайт.
 
-> **Важно:** официальный YouTube Data API v3 **не поддерживает** создание
-> community posts. Эндпоинта нет. Реализация — только UI-автоматизация.
+## Два пути публикации
+
+| Путь | Что делает | Требования |
+|------|------------|------------|
+| `api` (по умолчанию) | fetch-реплей из вкладки youtube.com: upload init → upload finalize (`encryptedBlobId`) → `backstage/create_post` (текст + картинка + кадр) | macOS + Safari + **Allow JavaScript from Apple Events** + залогиненная вкладка `www.youtube.com` |
+| `ui` (fallback) | DOM-автоматизация диалога «Создать запись» — **только текст** | то же |
+
+Поток `api` снят с реального прогона **08.10.2026** (заголовки, тела, `previewCoordinates` —
+см. `~/.opencode/plan/posts_js_20261007/POSTS_NETLOG_FINDINGS.md`).
 
 ## Требования (macOS)
 
 1. Safari с включённым **Develop → Allow JavaScript from Apple Events**.
-2. Для картинки (fallback через нативный пикер): разрешение **Accessibility**
-   для Terminal / вашего терминала / Python
-   (Системные настройки → Конфиденциальность → Универсальный доступ).
-3. `channel.expected_channel_id` в `~/.config/aiyoutubehands/config.yaml`
-   (или `config/local.yaml`).
+2. Залогиненная вкладка **www.youtube.com** (команда сама найдёт или откроет её).
+3. `channel.expected_channel_id` в `~/.config/aiyoutubehands/config.yaml` (или `config/local.yaml`).
+4. **Accessibility / System Events не нужны** — они требовались только старому пути
+   через нативный пикер, который больше не используется.
 
 ## Требования к картинке (вкладка «Сообщество»)
 
-Обязательно соблюдать при подготовке файла — иначе превью в ленте обрежется
-или публикация упадёт.
-
 | Параметр | Значение |
 |----------|----------|
-| Соотношение сторон | **1:1 (квадрат)** — рекомендуется. В общей ленте кадрируется под квадрат; 16:9 / 9:16 обрежутся по краям. |
+| Соотношение сторон | **1:1 (квадрат)** — рекомендуется. В ленте кадрируется под квадрат; для не-квадратных команда сама выставляет кадр (`--crop`). |
 | Разрешение | Оптимально **1080×1080 … 1200×1200** px |
 | Форматы | JPG, PNG, GIF (в т.ч. анимированный), WEBP |
 | Макс. размер файла | **16 МБ** |
 | Кол-во в одной записи | До **10** (карусель). Текущая CLI принимает **одно** изображение. |
 | Опросы с картинками | 1:1, до 4 вариантов, подпись ≤36 символов — **пока не в CLI** |
 
-CLI при `--image` печатает эти требования в dry-run. Валидация жёстко режет
-формат и размер >16 МБ; соотношение сторон — рекомендация (без Pillow не
-измеряем пиксели).
+`--crop` (для не-квадратных): `center` (по умолчанию) · `left` · `right` · `top` · `bottom`.
+Размеры картинки читаются без Pillow (заголовки JPEG/PNG/GIF/WEBP); если не распознались —
+кадр выставляется полный и команда печатает предупреждение.
 
 ## CLI
-
 
 ```bash
 # План (ничего не публикует) — по умолчанию
 ayh post create --text-file ./post.txt
 
-# С картинкой
-ayh post create --text-file ./post.txt --image ./cover.jpg
+# С картинкой и кадром
+ayh post create --text-file ./post.txt --image ./cover.jpg --crop right
 
 # JSON-план
 ayh post create --text-file ./post.txt --json
 
-# Реальная публикация (только на macOS, после подтверждения)
-ayh post create --text-file ./post.txt --image ./cover.jpg --no-dry-run --yes
+# Реальная публикация (только macOS, после подтверждения)
+ayh post create --text-file ./post.txt --image ./cover.jpg --crop right \
+  --no-dry-run --yes \
+  --confirm "подтверждаю план от ДД.ММ.ГГГГ #<plan_hash>"
 ```
 
-Подтверждение следует правилам репозитория
-(`docs/AGENT_PROMPT_PROCESS.md`): фраза вида
-
-```
-подтверждаю план от ДД.ММ.ГГГГ #<plan_hash>
-```
+Подтверждение — по правилам репозитория (`docs/AGENT_PROMPT_PROCESS.md`):
+фраза с **сегодняшней датой** и **hash из dry-run**; иначе публикации не будет.
 
 ## Поведение
 
 | Флаг | Действие |
 |------|----------|
-| `--dry-run` (default) | Показать URL, превью текста, шаги, hash. Safari не трогает. |
-| `--no-dry-run --yes` | Открыть диалог, вставить текст, (опц.) картинку, нажать «Опубликовать». |
-| Картинка не прикрепилась | **Стоп.** Пост без картинки не публикуется. |
+| `--dry-run` (default) | Показать URL, путь, превью текста, размер/кадр картинки, шаги, hash и фразу. Safari не трогает. |
+| `--no-dry-run --yes --confirm "…"` | Выполнить публикацию выбранным путём. |
+| `--via ui` | Fallback: DOM-клики (только текст; картинка — ошибка с подсказкой). |
+| Картинка не загрузилась | **Стоп.** Пост без картинки не публикуется. |
+| Проверка успеха | После `create_post` команда ищет пост на `/posts` (best-effort). `OK` без `verified` — проверьте глазами. |
 
 ## Архитектура
 
 ```
 src/aiyoutubehands/posts/
   __init__.py
-  models.py    # PostPayload, validate_text_file / validate_image_path
-  js.py        # ASCII-safe JS (кириллица → \uXXXX)
-  safari.py    # osascript / System Events (только Darwin)
-  errors.py    # SafariNotAvailable, ElementTimeout, PublishRejected, …
+  models.py    # PostPayload, валидация текста/картинки, crop
+  webapi.py    # protobuf-параметры, координаты кадра, размеры картинок (чистый Python)
+  js.py        # ASCII-safe JS: UI-клики + fetch-реплей (upload / create_post)
+  safari.py    # драйвер Safari: файловый do JavaScript, вкладки, опрос async-результатов
+  errors.py    # SafariNotAvailable, ElementTimeout, PublishRejected, ImageAttachFailed, …
 commands/post_cmd.py
 ```
 
 Ядро и unit-тесты кроссплатформенные. Реальный прогон — только на Mac.
 
-## Ограничения
+## Ограничения и заметки
 
-- Только «создать сейчас». Отложенной публикации у Записей нет.
-- Успех = пост виден на `/posts`. Ответ на клик проверкой не является.
-- Серверная ошибка «Не удалось опубликовать запись» детектится и считается провалом.
-- Синтетическая подстановка `File` через DataTransfer рисует превью, но
-  сервер часто отклоняет пост — поэтому основной путь для картинки:
-  нативный file dialog (System Events) или будущий HAR-replay.
-
-## Ручной прогон (чеклист)
-
-1. `ayh post create --text-file t.txt --dry-run` — план корректен.
-2. Safari: Develop → Allow JavaScript from Apple Events.
-3. `ayh post create --text-file t.txt --no-dry-run --yes`
-4. Открыть `https://www.youtube.com/channel/<ID>/posts` — запись на месте.
-5. С `--image`: либо пост с картинкой, либо явная ошибка (не молча без неё).
+- Только «создать сейчас» — отложенной публикации у Записей нет.
+- Веб-флоу неофициальный: если YouTube поменяет схему, обновляем по свежей лог-съёмке
+  (`net_hooks3.js` в `~/.opencode/plan/posts_js_20261007/`).
+- Если сервер отвечает `401/403` на `create_post`, команда сама вычисляет `SAPISIDHASH`
+  из доступной JS-куки (`__Secure-3PAPISID`) и повторяет запрос один раз.
+- Большие картинки передаются чанками (b64) в страницу; лимит 16 МБ как в Studio.
+- Синтетическая подстановка `File` через DataTransfer в UI-диалог **не используется** —
+  сервер отклонял такие публикации; путь `api` отправляет байты штатным resumable-upload.
 
 ## Тесты
 
 ```bash
-PYTHONPATH=src pytest tests/test_posts_js.py tests/test_posts_models.py tests/test_posts_cli.py -v
+PYTHONPATH=src pytest tests/test_posts_webapi.py tests/test_posts_js.py \
+  tests/test_posts_models.py tests/test_posts_cli.py -v
 ```

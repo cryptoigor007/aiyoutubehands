@@ -1,13 +1,18 @@
-"""CLI tests for ayh post create (dry-run only, no Safari)."""
+"""CLI tests for ayh post create (dry-run + confirmation rules; no Safari)."""
 
 from __future__ import annotations
 
-from pathlib import Path
+from datetime import date
+from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
 
 from aiyoutubehands.main import cli
+from aiyoutubehands.posts.models import PostPayload
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -58,6 +63,122 @@ def test_post_create_dry_run_with_config(
     )
     assert r.exit_code == 0, r.output
     assert "DRY-RUN" in r.output or "dry_run" in r.output
+
+
+# ---------------------------------------------------------------------------
+# Confirmation phrase rules (repo standard: «подтверждаю план от ДД.ММ.ГГГГ #hash»)
+# ---------------------------------------------------------------------------
+
+
+def _fake_plan(payload: PostPayload, *, via: str = "api") -> dict:
+    return {
+        "dry_run": True,
+        "via": via,
+        "url": "https://example.invalid/posts",
+        "text_preview": payload.text[:50],
+        "text_len": len(payload.text),
+        "image": None,
+        "image_size": None,
+        "crop": payload.crop,
+        "preview_coordinates": None,
+        "platform": "Darwin",
+        "safari_available": True,
+        "steps": [],
+        "image_requirements": None,
+    }
+
+
+def _config(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    cfg_dir = tmp_path / ".config" / "aiyoutubehands"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "config.yaml").write_text(
+        "channel:\n  expected_channel_id: UCtestdryrun123\n",
+        encoding="utf-8",
+    )
+
+
+def _invoke_with_mocks(monkeypatch, args):
+    import aiyoutubehands.commands.post_cmd as pc
+
+    calls: list[str] = []
+    monkeypatch.setattr(pc, "dry_run_plan", _fake_plan)
+    monkeypatch.setattr(
+        pc,
+        "publish_post",
+        lambda payload, via="api", progress=None: (
+            calls.append(via) or {"ok": True, "via": via, "verified": True}
+        ),
+    )
+    runner = CliRunner()
+    return runner.invoke(cli, args), calls
+
+
+def test_publish_requires_confirm_phrase(text_file: Path, tmp_path: Path, monkeypatch) -> None:
+    _config(tmp_path, monkeypatch)
+    r, calls = _invoke_with_mocks(
+        monkeypatch,
+        ["post", "create", "--text-file", str(text_file), "--no-dry-run", "--yes"],
+    )
+    assert r.exit_code != 0
+    assert not calls
+
+
+def test_publish_rejects_wrong_date(text_file: Path, tmp_path: Path, monkeypatch) -> None:
+    _config(tmp_path, monkeypatch)
+    r, calls = _invoke_with_mocks(
+        monkeypatch,
+        [
+            "post", "create", "--text-file", str(text_file),
+            "--no-dry-run", "--yes",
+            "--confirm", "подтверждаю план от 01.01.2020 #deadbeefdead",
+        ],
+    )
+    assert r.exit_code != 0
+    assert not calls
+
+
+def test_publish_rejects_wrong_hash(text_file: Path, tmp_path: Path, monkeypatch) -> None:
+    _config(tmp_path, monkeypatch)
+    today = date.today().strftime("%d.%m.%Y")
+    r, calls = _invoke_with_mocks(
+        monkeypatch,
+        [
+            "post", "create", "--text-file", str(text_file),
+            "--no-dry-run", "--yes",
+            "--confirm", f"подтверждаю план от {today} #000000000000",
+        ],
+    )
+    assert r.exit_code != 0
+    assert not calls
+
+
+def test_publish_with_correct_phrase(text_file: Path, tmp_path: Path, monkeypatch) -> None:
+    _config(tmp_path, monkeypatch)
+    import aiyoutubehands.commands.post_cmd as pc
+
+    payload = PostPayload.from_files(text_file, None, channel_id="UCtestdryrun123")
+    h = pc._plan_hash(payload, via="api")
+    today = date.today().strftime("%d.%m.%Y")
+    r, calls = _invoke_with_mocks(
+        monkeypatch,
+        [
+            "post", "create", "--text-file", str(text_file),
+            "--no-dry-run", "--yes",
+            "--confirm", f"подтверждаю план от {today} #{h}",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    assert calls == ["api"]
+
+
+def test_dry_run_shows_api_steps_and_phrase(text_file: Path, tmp_path: Path, monkeypatch) -> None:
+    _config(tmp_path, monkeypatch)
+    runner = CliRunner()
+    r = runner.invoke(cli, ["post", "create", "--text-file", str(text_file), "--dry-run"])
+    assert r.exit_code == 0, r.output
+    assert "create_post" in r.output
+    assert "подтверждаю план от" in r.output
     assert "UCtestdryrun123" in r.output
     assert "Тестовая" in r.output or "text" in r.output.lower()
     assert "подтверждаю план" in r.output

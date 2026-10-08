@@ -211,10 +211,12 @@ uEkCqasul-8  Почему никто не хочет вкладываться в
 Кратко:
 
 ```bash
-ayh post create --text-file post.txt          # dry-run
-ayh post create --text-file post.txt --image img.jpg --no-dry-run --yes
+ayh post create --text-file post.txt                          # dry-run (план + фраза)
+ayh post create --text-file post.txt --image img.jpg --crop right \
+  --no-dry-run --yes --confirm "подтверждаю план от ДД.ММ.ГГГГ #<hash>"
 ```
 
-Только macOS + Safari (Allow JavaScript from Apple Events).  
-Картинка: при неудаче прикрепления — стоп, без молчаливой публикации без неё.  
+Только macOS + Safari (Allow JavaScript from Apple Events; Accessibility **не нужен**).  
+Путь по умолчанию — `api`: fetch-реплей из вкладки youtube.com (upload → encryptedBlobId → create_post).  
+Картинка: при неудаче — стоп, без молчаливой публикации без неё.  
 Подтверждение — по общим правилам репо (фраза с датой и hash плана).
