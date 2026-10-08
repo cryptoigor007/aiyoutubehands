@@ -159,6 +159,13 @@ def test_create_post_js_cyrillic_and_structure() -> None:
     assert "encryptedBlobId" in js
     assert "previewCoordinates" in js
     assert "SAPISIDHASH" in js
+    assert "SAPISID3PHASH" in js
+    assert "buildAuth" in js
+    assert "x-goog-authuser" in js
+    assert "x-goog-visitor-id" in js
+    assert "x-youtube-bootstrap-logged-in" in js
+    assert "SESSION_INDEX" in js
+    assert "VISITOR_DATA" in js
     assert "CompressionStream" in js
 
 

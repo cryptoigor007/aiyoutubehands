@@ -285,10 +285,15 @@ def build_create_post_js(
 ) -> str:
     """JS that publishes the post via ``backstage/create_post``.
 
-    Sends the request first **without** the authorization header (cookies only —
-    verified to be enough for InnerTube calls from the page); if the server
-    answers 401/403, computes ``SAPISIDHASH`` from the JS-readable
-    ``__Secure-3PAPISID`` cookie and retries once.
+    Mirrors the captured web-client request (08.10.2026): sends
+    ``x-goog-authuser`` (``SESSION_INDEX``), ``x-goog-visitor-id``
+    (``VISITOR_DATA``), ``x-youtube-bootstrap-logged-in`` and an
+    ``authorization`` header computed up-front from the JS-readable
+    ``__Secure-3PAPISID`` cookie
+    (``SAPISIDHASH <ts>_<sha1>_u SAPISID3PHASH <ts>_<sha1>_u`` — the captured
+    request carries the same hash under both names).  If the server still
+    answers 401/403, retries once **without** the authorization header
+    (cookies-only fallback).
 
     The JSON body is gzip-compressed via ``CompressionStream`` when available
     (same as the web client); falls back to a plain JSON body.
@@ -300,14 +305,24 @@ def build_create_post_js(
 (function() {{
   window.{RESULT_VAR} = "";
   function done(o) {{ window.{RESULT_VAR} = JSON.stringify(o); }}
+  function cfg(key) {{
+    try {{ return (window.ytcfg && window.ytcfg.get) ? window.ytcfg.get(key) : undefined; }}
+    catch (e) {{ return undefined; }}
+  }}
   function buildHeaders(authHeader) {{
     var headers = {{
       "content-type": "application/json",
       "x-origin": "https://www.youtube.com",
       "x-youtube-client-name": "1",
-      "x-youtube-client-version": (window.ytcfg && window.ytcfg.get)
-        ? String(window.ytcfg.get("INNERTUBE_CLIENT_VERSION") || "") : ""
+      "x-youtube-client-version": String(cfg("INNERTUBE_CLIENT_VERSION") || ""),
+      "x-youtube-bootstrap-logged-in": "true"
     }};
+    var authuser = cfg("SESSION_INDEX");
+    if (authuser !== undefined && authuser !== null && authuser !== "") {{
+      headers["x-goog-authuser"] = String(authuser);
+    }}
+    var visitor = cfg("VISITOR_DATA");
+    if (visitor) {{ headers["x-goog-visitor-id"] = String(visitor); }}
     if (authHeader) {{ headers["authorization"] = authHeader; }}
     return headers;
   }}
@@ -334,8 +349,8 @@ def build_create_post_js(
         }}).then(function(resp) {{
           return resp.text().then(function(t2) {{ return {{status: resp.status, text: t2}}; }});
         }}).then(function(r) {{
-          if ((r.status === 401 || r.status === 403) && !authHeader && !retried) {{
-            retryWithAuth();
+          if ((r.status === 401 || r.status === 403) && authHeader && !retried) {{
+            send("", true);
             return;
           }}
           done({{step: "create", ok: r.status === 200, status: r.status,
@@ -369,26 +384,25 @@ def build_create_post_js(
       finish(raw, false);
     }} catch (e) {{ done({{step: "create", ok: false, error: String(e)}}); }}
   }}
-  function retryWithAuth() {{
-    try {{
-      var m = document.cookie.match(/(?:^|;\\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)/);
-      var sapisid = m ? decodeURIComponent(m[1]) : "";
-      var ts = Math.floor(Date.now() / 1000);
-      if (sapisid && window.crypto && crypto.subtle) {{
+  function buildAuth() {{
+    return new Promise(function(resolve) {{
+      try {{
+        var m = document.cookie.match(/(?:^|;\\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)/);
+        var sapisid = m ? decodeURIComponent(m[1]) : "";
+        if (!sapisid || !(window.crypto && crypto.subtle)) {{ resolve(""); return; }}
+        var ts = Math.floor(Date.now() / 1000);
         crypto.subtle.digest("SHA-1", new TextEncoder().encode(ts + " " + sapisid + " " + "https://www.youtube.com"))
           .then(function(hash) {{
             var hex = "";
             var b = new Uint8Array(hash);
             for (var i = 0; i < b.length; i++) {{ hex += ("0" + b[i].toString(16)).slice(-2); }}
-            send("SAPISIDHASH " + ts + "_" + hex + "_u", true);
+            resolve("SAPISIDHASH " + ts + "_" + hex + "_u SAPISID3PHASH " + ts + "_" + hex + "_u");
           }})
-          .catch(function() {{ send("", true); }});
-      }} else {{
-        send("", true);
-      }}
-    }} catch (e) {{ send("", true); }}
+          .catch(function() {{ resolve(""); }});
+      }} catch (e) {{ resolve(""); }}
+    }});
   }}
-  send("", false);
+  buildAuth().then(function(auth) {{ send(auth, false); }});
   return "started";
 }})();
 """.strip()
