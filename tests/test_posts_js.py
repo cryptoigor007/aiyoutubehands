@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from aiyoutubehands.posts.js import (
+    BLOB_VAR,
     CONTENT_EDITABLE_SELECTOR,
     PLACEHOLDER_SELECTOR,
     POST_BUTTON_SELECTOR,
+    RESULT_VAR,
     ascii_safe_js_string,
     build_check_error_banner_js,
     build_click_placeholder_js,
@@ -15,6 +17,7 @@ from aiyoutubehands.posts.js import (
     build_page_ready_js,
     build_publish_click_js,
     build_reset_result_js,
+    build_reset_result_only_js,
     build_type_text_js,
     build_upload_chunk_js,
     build_upload_finalize_js,
@@ -169,6 +172,13 @@ def test_create_post_js_cyrillic_and_structure() -> None:
     assert "SESSION_INDEX" in js
     assert "VISITOR_DATA" in js
     assert "CompressionStream" in js
+
+
+def test_reset_result_only_keeps_blob_var() -> None:
+    js = build_reset_result_only_js()
+    assert all(ord(c) < 128 for c in js)
+    assert RESULT_VAR in js
+    assert BLOB_VAR not in js
 
 
 def test_page_ready_and_result_builders() -> None:

@@ -50,6 +50,15 @@ CHUNK_SIZE = 400_000
 
 YOUTUBE_URL_PART = "www.youtube.com"
 
+#: the finalized upload blob needs a moment of server-side processing before
+#: ``create_post`` accepts it (publishing right away yields 400 badRequest)
+BLOB_SETTLE_SECONDS = 6.0
+
+#: create_post attempts on 400 (server-side blob processing lag); 403/429 and
+#: other statuses stop immediately
+CREATE_ATTEMPTS = 3
+CREATE_RETRY_PAUSE_SECONDS = 6.0
+
 
 def _is_macos() -> bool:
     return platform.system() == "Darwin"
@@ -338,11 +347,23 @@ def publish_post_api(
     if payload.image is not None and wh is None:
         say("ВНИМАНИЕ: размеры картинки не распознаны — кадр выставлен полный.")
 
+    if payload.image is not None:
+        time.sleep(BLOB_SETTLE_SECONDS)
+
     params = build_create_backstage_post_params(payload.channel_id)
     say("Публикация: create_post…")
-    _do_javascript(jsmod.build_reset_result_js())
-    _do_javascript(jsmod.build_create_post_js(params, payload.text, coords))
-    res = _poll_result(expect_step="create", timeout_s=timeout_s)
+    res = {}
+    for attempt in range(1, CREATE_ATTEMPTS + 1):
+        _do_javascript(jsmod.build_reset_result_only_js())
+        _do_javascript(jsmod.build_create_post_js(params, payload.text, coords))
+        res = _poll_result(expect_step="create", timeout_s=timeout_s)
+        if res.get("ok"):
+            break
+        if res.get("status") == 400 and attempt < CREATE_ATTEMPTS:
+            say(f"create_post: сервер ещё не готов (400), повтор {attempt + 1}…")
+            time.sleep(CREATE_RETRY_PAUSE_SECONDS)
+            continue
+        break
     if not res.get("ok"):
         detail = res.get("responseHead") or res.get("error") or res.get("status")
         raise PublishRejectedError(str(detail)[:300])

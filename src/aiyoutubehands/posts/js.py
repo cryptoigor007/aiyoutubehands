@@ -173,6 +173,20 @@ def build_reset_result_js() -> str:
 """.strip()
 
 
+def build_reset_result_only_js() -> str:
+    """JS that clears only the async-result slot (keeps the image blob id).
+
+    Used between ``create_post`` retries: the finalized blob id lives in
+    ``window.<BLOB_VAR>`` and must survive the retry.
+    """
+    return f"""
+(function() {{
+  window.{RESULT_VAR} = "";
+  return "reset";
+}})();
+""".strip()
+
+
 def build_get_result_js() -> str:
     """JS that returns the stored async result (a JSON string) or empty."""
     return f"""
